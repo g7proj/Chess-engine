@@ -1,0 +1,131 @@
+use crate::board::{Board};
+use crate::moves::Move;
+
+impl Board {
+    pub fn generate_bishop_moves(&self, rank: usize, file: usize) -> Vec<Move> {
+        let mut moves = Vec::new();
+        let piece = self.squares[rank][file];
+        
+        // check if the piece is a bishop
+        if !self.is_bishop(piece) {
+            return moves;
+        }
+
+        let directions = [
+            (1, 1), (-1, -1),
+            (1, -1), (-1, 1),
+        ];
+
+        for (dr, df) in directions {
+            let mut new_rank = rank as isize + dr;
+            let mut new_file = file as isize + df;
+
+            while new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+                let target_piece = self.squares[new_rank as usize][new_file as usize];
+
+                if self.is_empty(target_piece) {
+                    // if the target position is empty add to the moves
+                    moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
+                }
+                else if !self.same_color(piece, target_piece) {
+                    // if the target position has an opponent piece add to the moves and break
+                    moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
+                    break;
+                }
+                else {
+                    // if the target position has a same color piece break
+                    break;
+                }
+                new_rank += dr;
+                new_file += df;
+            }
+        }
+
+        moves
+    }
+
+    pub fn generate_rook_moves(&self, rank: usize, file: usize) -> Vec<Move> {
+        let mut moves = Vec::new();
+        let piece = self.squares[rank][file];
+        
+        // check if the piece is a rook
+        if !self.is_rook(piece) {
+            return moves;
+        }
+
+        let directions = [
+            (1, 0), (-1, 0),
+            (0, 1), (0, -1),
+        ];
+        
+        for (dr, df) in directions {
+            let mut new_rank = rank as isize + dr;
+            let mut new_file = file as isize + df;
+
+            while new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+                let target_piece = self.squares[new_rank as usize][new_file as usize];
+
+                if self.is_empty(target_piece) {
+                    // if the target position is empty add to the moves
+                    moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
+                }
+                else if !self.same_color(piece, target_piece) {
+                    // if the target position has an opponent piece add to the moves and break
+                    moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
+                    break;
+                }
+                else {
+                    // if the target position has a same color piece break
+                    break;
+                }
+                new_rank += dr;
+                new_file += df;
+            }
+        }
+
+        moves
+    }
+
+    pub fn generate_queen_moves(&self, rank: usize, file: usize) -> Vec<Move> {
+        let mut moves = Vec::new();
+        let piece = self.squares[rank][file];
+        
+        // check if the piece is a queen
+        if !self.is_queen(piece) {
+            return moves;
+        }
+
+        let directions = [
+            (1, 0), (-1, 0),
+            (0, 1), (0, -1),
+            (1, 1), (-1, -1),
+            (1, -1), (-1, 1),
+        ];
+        
+        for (dr, df) in directions {
+            let mut new_rank = rank as isize + dr;
+            let mut new_file = file as isize + df;
+
+            while new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+                let target_piece = self.squares[new_rank as usize][new_file as usize];
+
+                if self.is_empty(target_piece) {
+                    // if the target position is empty add to the moves
+                    moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
+                }
+                else if !self.same_color(piece, target_piece) {
+                    // if the target position has an opponent piece add to the moves and break
+                    moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
+                    break;
+                }
+                else {
+                    // if the target position has a same color piece break
+                    break;
+                }
+                new_rank += dr;
+                new_file += df;
+            }
+        }
+        moves
+    }
+}

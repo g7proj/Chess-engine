@@ -131,6 +131,24 @@ impl Board {
         )
     }
 
+    pub fn in_bounds(&self, pos: (isize, isize)) -> bool {
+        let (r, f) = pos;
+        r >= 0 && r < 8 && f >= 0 && f < 8
+    }
+
+    pub fn is_white(&self, piece: Piece) -> bool {
+        matches!(piece, Piece::PawnWhite | Piece::KnightWhite | Piece::BishopWhite | Piece::RookWhite | Piece::QueenWhite | Piece::KingWhite)
+    }
+
+    pub fn is_black(&self, piece: Piece) -> bool {
+        matches!(piece, Piece::PawnBlack | Piece::KnightBlack | Piece::BishopBlack | Piece::RookBlack | Piece::QueenBlack | Piece::KingBlack)
+    }
+
+    pub fn same_color(&self, piece1: Piece, piece2: Piece) -> bool {
+        (self.is_white(piece1) && self.is_white(piece2)) ||
+        (self.is_black(piece1) && self.is_black(piece2))
+    }
+
     // print the board in a nice format
     pub fn print(&self) {
         print!("{}", self);
