@@ -17,7 +17,7 @@ pub enum Piece {
 
 impl std::fmt::Display for Piece {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let piece_char = match self {
+        let piece_char: &str = match self {
             Piece::Empty => ".",
             Piece::PawnWhite => "P",
             Piece::KnightWhite => "N",
@@ -36,10 +36,35 @@ impl std::fmt::Display for Piece {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Color {
+    White,
+    Black,
+}
+
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let c: char = match self {
+            Color::White => 'w',
+            Color::Black => 'b',
+        };
+        write!(f, "{}", c)
+    }
+}
+
+impl Color {
+    pub fn opposite(&self) -> Color {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Board {
     pub squares: [[Piece; 8]; 8],
-    pub side_to_move: char,
+    pub side_to_move: Color,
     pub en_passant: Option<(usize, usize)>,
     pub white_kingside_castle: bool,
     pub white_queenside_castle: bool,
@@ -49,7 +74,7 @@ pub struct Board {
 
 impl std::fmt::Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut r_index = 8;
+        let mut r_index: i32 = 8;
         for rank in self.squares.iter().rev() {
             r_index -= 1;
             write!(f, "R{} - ", r_index)?;
@@ -66,7 +91,7 @@ impl Board {
     pub fn new() -> Self {
         use Piece::*;
         // Initialize the board with the starting positions
-        let squares = [
+        let squares: [[Piece; 8]; 8] = [
             [RookWhite, KnightWhite, BishopWhite, QueenWhite, KingWhite, BishopWhite, KnightWhite, RookWhite],
             [PawnWhite; 8],
             [Empty; 8],
@@ -78,7 +103,7 @@ impl Board {
         ];
         Board { 
             squares,
-            side_to_move: 'w',
+            side_to_move: Color::White,
             en_passant: None,
             white_kingside_castle: true,
             white_queenside_castle: true,
@@ -149,8 +174,55 @@ impl Board {
         (self.is_black(piece1) && self.is_black(piece2))
     }
 
+    pub fn piece_color(&self, piece: Piece) -> Option<Color> {
+        if self.is_white(piece) {
+            Some(Color::White)
+        }
+        else if self.is_black(piece) {
+            Some(Color::Black)
+        }
+        else {
+            None
+        }
+    }
+
     // print the board in a nice format
     pub fn print(&self) {
         print!("{}", self);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_board_initialization() {
+        let board: Board = Board::new();
+        assert_eq!(board.side_to_move, Color::White);
+        assert_eq!(board.en_passant, None);
+        assert_eq!(board.white_kingside_castle, true);
+        assert_eq!(board.white_queenside_castle, true);
+        assert_eq!(board.black_kingside_castle, true);
+        assert_eq!(board.black_queenside_castle, true);
+
+        // Check kings position
+        assert_eq!(board.squares[0][4], Piece::KingWhite);
+        assert_eq!(board.squares[7][4], Piece::KingBlack);
+    }
+
+    #[test]
+    fn test_piece_helpers() {
+        let board = Board::new();
+        assert_eq!(board.is_white(Piece::PawnWhite), true);
+        assert_eq!(board.is_white(Piece::PawnBlack), false);
+        assert_eq!(board.is_black(Piece::PawnBlack), true);
+        assert_eq!(board.is_black(Piece::PawnWhite), false);
+        assert_eq!(board.same_color(Piece::KnightWhite, Piece::PawnWhite), true);
+        assert_eq!(board.same_color(Piece::PawnWhite, Piece::PawnBlack), false);
+        assert_eq!(board.in_bounds((0, 0)), true);
+        assert_eq!(board.in_bounds((7, 7)), true);
+        assert_eq!(board.in_bounds((2, 8)), false);
+        assert_eq!(board.in_bounds((8, 3)), false);
     }
 }

@@ -1,4 +1,4 @@
-use crate::board::{Board, Piece};
+use crate::board::{Board, Piece, Color};
 use crate::moves::Move;
 
 impl Board {
@@ -24,7 +24,7 @@ impl Board {
             let new_file = file as isize + df;
 
             // check if the new position is on the board
-            if new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+            if self.in_bounds((new_rank, new_file)) {
                 let target_piece = self.squares[new_rank as usize][new_file as usize];
 
                 // check if the target position is empty or has an opponent piece
@@ -36,9 +36,9 @@ impl Board {
 
         // generate castling moves
         use Piece::*;
-        let is_white = self.is_white(piece);
-        let color = if piece == KingWhite { 'w' } else { 'b' };
-        let opponent_color = if color == 'b' { 'w' } else { 'b' };
+        let is_white: bool = self.is_white(piece);
+        let color: Color = self.piece_color(piece).unwrap();
+        let opponent_color: Color = color.opposite();
 
         // short castling (kingside)
         if is_white && rank == 0 && file == 4 && self.white_kingside_castle {
@@ -101,5 +101,42 @@ impl Board {
         }
 
         moves
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_king_moves_center() {
+        let mut board = Board::new();
+        // Clean the board
+        for r in 0..8 {
+            for f in 0..8 {
+                board.squares[r][f] = Piece::Empty;
+            }
+        }
+        // Place the king in the center of the board
+        board.squares[4][4] = Piece::KingWhite;
+
+        let moves = board.generate_king_moves(4, 4);
+        assert_eq!(moves.len(), 8);
+    }
+
+    #[test]
+    fn test_king_castling_rights() {
+        let mut board = Board::new();
+        // make space around the white king
+        board.squares[0][1] = Piece::Empty;
+        board.squares[0][2] = Piece::Empty;
+        board.squares[0][3] = Piece::Empty;
+        board.squares[1][3] = Piece::Empty;
+        board.squares[1][4] = Piece::Empty;
+        board.squares[1][5] = Piece::Empty;
+        board.squares[0][5] = Piece::Empty;
+        board.squares[0][6] = Piece::Empty;
+        let moves = board.generate_king_moves(0, 4);
+        assert_eq!(moves.len(), 7);
     }
 }

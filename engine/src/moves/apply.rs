@@ -1,4 +1,4 @@
-use crate::board::{Board, Piece};
+use crate::board::{Board, Piece, Color};
 use crate::moves::Move;
 
 impl Board {
@@ -166,11 +166,11 @@ impl Board {
         // ---------------------
         // 6. Switch moving side
         // ---------------------
-        if self.side_to_move == 'w' {
-            self.side_to_move = 'b';
+        if self.side_to_move == Color::White {
+            self.side_to_move = Color::Black;
         }
         else {
-            self.side_to_move = 'w';
+            self.side_to_move = Color::White;
         }
     }
 }

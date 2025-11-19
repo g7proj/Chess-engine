@@ -24,7 +24,7 @@ impl Board {
             let new_file = file as isize + df;
 
             // check if the new position is on the board
-            if new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+            if self.in_bounds((new_rank, new_file)) {
                 let target_piece = self.squares[new_rank as usize][new_file as usize];
 
                 // check if the target position is empty or has an opponent piece

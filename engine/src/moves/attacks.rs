@@ -1,11 +1,11 @@
-use crate::board::{Board, Piece};
+use crate::board::{Board, Piece, Color};
 
 impl Board {
-    pub fn is_in_check(&self, color: char) -> bool {
+    pub fn is_in_check(&self, color: Color) -> bool {
         use Piece::*;
 
         // find king position
-        let king_piece = if color =='w' { KingWhite } else { KingBlack };
+        let king_piece = if color == Color::White { KingWhite } else { KingBlack };
         let mut king_rank = 0;
         let mut king_file = 0;
         let mut king_found = false;
@@ -25,14 +25,14 @@ impl Board {
         if !king_found { return false; }
 
         // Check if some opponent piece can attak the king
-        let opponent_color = if color == 'w' { 'b' } else  { 'w' };
+        let opponent_color: Color = color.opposite();
 
         for r in 0..8 {
             for f in 0..8 {
                 let piece = self.squares[r][f];
                 if piece != Empty {
-                    let piece_color = if self.is_white(piece) { 'w' } else { 'b' };
-                    if piece_color == opponent_color {
+                    let piece_color: Option<Color> = self.piece_color(piece);
+                    if piece_color == Some(opponent_color) {
                         // Generate all moves for this piece
                         let moves = match piece {
                             PawnWhite | PawnBlack => self.generate_pawn_moves(r, f),
@@ -58,15 +58,15 @@ impl Board {
         false
     }
 
-    pub fn is_square_under_attack(&self, rank: usize, file: usize, attack_by_color: char) -> bool {
+    pub fn is_square_under_attack(&self, rank: usize, file: usize, attack_by_color: Color) -> bool {
         use Piece::*;
 
         for r in 0..8 {
             for f in 0..8 {
                 let piece = self.squares[r][f];
                 if piece != Empty {
-                    let piece_color = if self.is_white(piece) { 'w' } else { 'b' };
-                    if piece_color == attack_by_color {
+                    let piece_color: Option<Color> = self.piece_color(piece);
+                    if piece_color == Some(attack_by_color) {
                         // Generate all moves for this piece
                         let moves = match piece {
                             PawnWhite | PawnBlack => self.generate_pawn_moves(r, f),

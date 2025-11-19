@@ -91,3 +91,37 @@ impl Board {
         ]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // use crate::moves::Move;
+
+    #[test]
+    fn test_pawn_initial_double_move() {
+        let board = Board::new();
+        // retrieve the pawn moves
+        let moves = board.generate_pawn_moves(1, 3);
+        // should have 2 available moves
+        assert_eq!(moves.len(), 2);
+    }
+
+    #[test]
+    fn test_pawn_en_passant() {
+        let mut board = Board::new();
+        // set up board for en passant
+        for r in 0..8 {
+            for f in 0..8 {
+                board.squares[r][f] = Piece::Empty;
+            }
+        }
+        board.squares[4][3] = Piece::PawnBlack;
+        board.squares[4][4] = Piece::PawnWhite;
+        board.en_passant = Some((5, 3));
+
+        // generate moves for white pawn
+        let moves = board.generate_pawn_moves(4, 4);
+        // Check the en passant move
+        assert!(moves.iter().any(|m| m.to_rank == 5 && m.to_file == 3));
+    }
+}

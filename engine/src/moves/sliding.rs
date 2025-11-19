@@ -20,7 +20,7 @@ impl Board {
             let mut new_rank = rank as isize + dr;
             let mut new_file = file as isize + df;
 
-            while new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+            while self.in_bounds((new_rank, new_file)) {
                 let target_piece = self.squares[new_rank as usize][new_file as usize];
 
                 if self.is_empty(target_piece) {
@@ -62,7 +62,7 @@ impl Board {
             let mut new_rank = rank as isize + dr;
             let mut new_file = file as isize + df;
 
-            while new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+            while self.in_bounds((new_rank, new_file)) {
                 let target_piece = self.squares[new_rank as usize][new_file as usize];
 
                 if self.is_empty(target_piece) {
@@ -106,7 +106,7 @@ impl Board {
             let mut new_rank = rank as isize + dr;
             let mut new_file = file as isize + df;
 
-            while new_rank >= 0 && new_rank < 8 && new_file >= 0 && new_file < 8 {
+            while self.in_bounds((new_rank, new_file)) {
                 let target_piece = self.squares[new_rank as usize][new_file as usize];
 
                 if self.is_empty(target_piece) {
