@@ -47,6 +47,9 @@ impl Move {
 }
 
 impl Board {
+    /**
+     * Generate all legal moves for the side to move
+     */
     pub fn generate_all_legal_moves(&self) -> Vec<Move> {
         use Piece::*;
         let mut all_moves: Vec<Move> = Vec::new();
@@ -90,7 +93,7 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::board::{self, Board, Color, Piece};
+    use crate::board::{Board, Color, Piece};
 
     #[test]
     fn test_generate_all_legal_moves_starting_position() {

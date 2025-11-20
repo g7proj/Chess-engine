@@ -1,4 +1,4 @@
-use crate::board::{Board, Piece, Color};
+use crate::{board::{Board, Color, Piece}, moves::Move};
 
 impl Board {
     pub fn is_in_check(&self, color: Color) -> bool {
@@ -56,6 +56,26 @@ impl Board {
             }
         }
         false
+    }
+
+    /**
+     * Return true if the side to move is in check and have no legal move
+     */
+    pub fn is_checkmate(&self) -> bool {
+        // Check if the side_to_move is under check and cannot move
+        self.is_in_check(self.side_to_move) && self.generate_all_legal_moves().is_empty()
+    }
+
+    pub fn is_stalemate(&self) -> bool {
+        // if the side to move is in check there is no stalemate
+        if self.is_in_check(self.side_to_move) {
+            return false;
+        }
+        // check if there are no legal move for the side to move
+        let moves: Vec<Move> = self.generate_all_legal_moves();
+        let is_stale: bool = moves.is_empty();
+
+        is_stale
     }
 
     pub fn is_square_under_attack(&self, rank: usize, file: usize, attack_by_color: Color) -> bool {
