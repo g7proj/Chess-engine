@@ -1,10 +1,11 @@
 use crate::board::{Board, Piece, Color};
+use crate::constants::in_bounds;
 use crate::moves::Move;
 
 impl Board {
     pub fn generate_king_moves(&self, rank: usize, file: usize) -> Vec<Move> {
-        let mut moves = Vec::new();
-        let piece = self.squares[rank][file];
+        let mut moves: Vec<Move> = Vec::new();
+        let piece: Piece = self.squares[rank][file];
 
         // check if the piece is a king
         if !self.is_king(piece) {
@@ -20,12 +21,12 @@ impl Board {
         ];
         
         for (dr, df) in king_offsets {
-            let new_rank = rank as isize + dr;
-            let new_file = file as isize + df;
+            let new_rank: isize = rank as isize + dr;
+            let new_file: isize = file as isize + df;
 
             // check if the new position is on the board
-            if self.in_bounds((new_rank, new_file)) {
-                let target_piece = self.squares[new_rank as usize][new_file as usize];
+            if in_bounds(new_rank, new_file) {
+                let target_piece: Piece = self.squares[new_rank as usize][new_file as usize];
 
                 // check if the target position is empty or has an opponent piece
                 if !self.same_color(piece, target_piece) {
@@ -106,27 +107,29 @@ impl Board {
 
 #[cfg(test)]
 mod tests {
+    use crate::constants::{FILES, RANKS};
+
     use super::*;
 
     #[test]
     fn test_king_moves_center() {
-        let mut board = Board::new();
+        let mut board: Board = Board::new();
         // Clean the board
-        for r in 0..8 {
-            for f in 0..8 {
+        for r in 0..RANKS {
+            for f in 0..FILES {
                 board.squares[r][f] = Piece::Empty;
             }
         }
         // Place the king in the center of the board
         board.squares[4][4] = Piece::KingWhite;
 
-        let moves = board.generate_king_moves(4, 4);
+        let moves: Vec<Move> = board.generate_king_moves(4, 4);
         assert_eq!(moves.len(), 8);
     }
 
     #[test]
     fn test_king_castling_rights() {
-        let mut board = Board::new();
+        let mut board: Board = Board::new();
         // make space around the white king
         board.squares[0][1] = Piece::Empty;
         board.squares[0][2] = Piece::Empty;
@@ -136,7 +139,7 @@ mod tests {
         board.squares[1][5] = Piece::Empty;
         board.squares[0][5] = Piece::Empty;
         board.squares[0][6] = Piece::Empty;
-        let moves = board.generate_king_moves(0, 4);
+        let moves: Vec<Move> = board.generate_king_moves(0, 4);
         assert_eq!(moves.len(), 7);
     }
 }

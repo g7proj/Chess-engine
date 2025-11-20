@@ -1,4 +1,4 @@
-use crate::board::{Board, Piece, Color};
+use crate::{board::{Board, Color, Piece}, constants::{FILES, RANKS}};
 pub mod knight;
 pub mod king;
 pub mod pawn;
@@ -55,8 +55,8 @@ impl Board {
         let mut all_moves: Vec<Move> = Vec::new();
 
         // Iterate through all squares
-        for r in 0..8 {
-            for f in 0..8 { 
+        for r in 0..RANKS {
+            for f in 0..FILES { 
                 let piece: Piece = self.squares[r][f];
                 if piece != Empty {
                     let piece_color: Color = self.piece_color(piece).unwrap();
@@ -93,7 +93,7 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::board::{Board, Color, Piece};
+    use crate::{board::{Board, Color, Piece}, constants::{FILES, RANKS}};
 
     #[test]
     fn test_generate_all_legal_moves_starting_position() {
@@ -108,8 +108,8 @@ mod tests {
     fn test_generate_all_legal_moves_filters_illegal() {
         let mut board: Board = Board::new();
         // Clear the board
-        for r in 0..8 {
-            for f in 0..8 {
+        for r in 0..RANKS {
+            for f in 0..FILES {
                 board.squares[r][f] = Piece::Empty;
             }
         }
@@ -127,8 +127,8 @@ mod tests {
     fn test_generate_all_legal_moves_empty_board() {
         let mut board: Board = Board::new();
         // Clear the board
-        for r in 0..8 {
-            for f in 0..8 {
+        for r in 0..RANKS {
+            for f in 0..FILES {
                 board.squares[r][f] = Piece::Empty;
             }
         }
@@ -157,8 +157,8 @@ mod tests {
     fn test_is_legal_move_prevents_self_check() {
         let mut board: Board = Board::new();
         // Clear board
-        for r in 0..8 {
-            for f in 0..8 {
+        for r in 0..RANKS {
+            for f in 0..FILES {
                 board.squares[r][f] = Piece::Empty;
             }
         }

@@ -1,3 +1,5 @@
+use crate::constants::{FILES, RANKS};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Piece {
     Empty,
@@ -63,7 +65,7 @@ impl Color {
 
 #[derive(Debug, Clone)]
 pub struct Board {
-    pub squares: [[Piece; 8]; 8],
+    pub squares: [[Piece; FILES]; RANKS],
     pub side_to_move: Color,
     pub en_passant: Option<(usize, usize)>,
     pub white_kingside_castle: bool,
@@ -91,14 +93,14 @@ impl Board {
     pub fn new() -> Self {
         use Piece::*;
         // Initialize the board with the starting positions
-        let squares: [[Piece; 8]; 8] = [
+        let squares: [[Piece; FILES]; RANKS] = [
             [RookWhite, KnightWhite, BishopWhite, QueenWhite, KingWhite, BishopWhite, KnightWhite, RookWhite],
-            [PawnWhite; 8],
-            [Empty; 8],
-            [Empty; 8],
-            [Empty; 8],
-            [Empty; 8],
-            [PawnBlack; 8],
+            [PawnWhite; FILES],
+            [Empty; FILES],
+            [Empty; FILES],
+            [Empty; FILES],
+            [Empty; FILES],
+            [PawnBlack; FILES],
             [RookBlack, KnightBlack, BishopBlack, QueenBlack, KingBlack, BishopBlack, KnightBlack, RookBlack],
         ];
         Board { 
@@ -156,10 +158,10 @@ impl Board {
         )
     }
 
-    pub fn in_bounds(&self, pos: (isize, isize)) -> bool {
-        let (r, f) = pos;
-        r >= 0 && r < 8 && f >= 0 && f < 8
-    }
+    // pub fn in_bounds(&self, pos: (isize, isize)) -> bool {
+    //     let (r, f) = pos;
+    //     r >= 0 && r < RANKS && f >= 0 && f < FILES
+    // }
 
     pub fn is_white(&self, piece: Piece) -> bool {
         matches!(piece, Piece::PawnWhite | Piece::KnightWhite | Piece::BishopWhite | Piece::RookWhite | Piece::QueenWhite | Piece::KingWhite)
@@ -194,6 +196,8 @@ impl Board {
 
 #[cfg(test)]
 mod test {
+    use crate::constants::in_bounds;
+
     use super::*;
 
     #[test]
@@ -220,9 +224,9 @@ mod test {
         assert_eq!(board.is_black(Piece::PawnWhite), false);
         assert_eq!(board.same_color(Piece::KnightWhite, Piece::PawnWhite), true);
         assert_eq!(board.same_color(Piece::PawnWhite, Piece::PawnBlack), false);
-        assert_eq!(board.in_bounds((0, 0)), true);
-        assert_eq!(board.in_bounds((7, 7)), true);
-        assert_eq!(board.in_bounds((2, 8)), false);
-        assert_eq!(board.in_bounds((8, 3)), false);
+        assert_eq!(in_bounds(0, 0), true);
+        assert_eq!(in_bounds(7, 7), true);
+        assert_eq!(in_bounds(2, 8), false);
+        assert_eq!(in_bounds(8, 3), false);
     }
 }

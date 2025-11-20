@@ -1,17 +1,18 @@
-use crate::board::{Board};
+use crate::board::{Board, Piece};
+use crate::constants::in_bounds;
 use crate::moves::Move;
 
 impl Board {
     pub fn generate_bishop_moves(&self, rank: usize, file: usize) -> Vec<Move> {
-        let mut moves = Vec::new();
-        let piece = self.squares[rank][file];
+        let mut moves: Vec<Move> = Vec::new();
+        let piece: Piece = self.squares[rank][file];
         
         // check if the piece is a bishop
         if !self.is_bishop(piece) {
             return moves;
         }
 
-        let directions = [
+        let directions: [(isize, isize); 4] = [
             (1, 1), (-1, -1),
             (1, -1), (-1, 1),
         ];
@@ -20,8 +21,8 @@ impl Board {
             let mut new_rank = rank as isize + dr;
             let mut new_file = file as isize + df;
 
-            while self.in_bounds((new_rank, new_file)) {
-                let target_piece = self.squares[new_rank as usize][new_file as usize];
+            while in_bounds(new_rank, new_file) {
+                let target_piece: Piece = self.squares[new_rank as usize][new_file as usize];
 
                 if self.is_empty(target_piece) {
                     // if the target position is empty add to the moves
@@ -45,25 +46,25 @@ impl Board {
     }
 
     pub fn generate_rook_moves(&self, rank: usize, file: usize) -> Vec<Move> {
-        let mut moves = Vec::new();
-        let piece = self.squares[rank][file];
+        let mut moves: Vec<Move> = Vec::new();
+        let piece: Piece = self.squares[rank][file];
         
         // check if the piece is a rook
         if !self.is_rook(piece) {
             return moves;
         }
 
-        let directions = [
+        let directions: [(isize, isize); 4] = [
             (1, 0), (-1, 0),
             (0, 1), (0, -1),
         ];
         
         for (dr, df) in directions {
-            let mut new_rank = rank as isize + dr;
-            let mut new_file = file as isize + df;
+            let mut new_rank: isize = rank as isize + dr;
+            let mut new_file: isize = file as isize + df;
 
-            while self.in_bounds((new_rank, new_file)) {
-                let target_piece = self.squares[new_rank as usize][new_file as usize];
+            while in_bounds(new_rank, new_file) {
+                let target_piece: Piece = self.squares[new_rank as usize][new_file as usize];
 
                 if self.is_empty(target_piece) {
                     // if the target position is empty add to the moves
@@ -87,15 +88,15 @@ impl Board {
     }
 
     pub fn generate_queen_moves(&self, rank: usize, file: usize) -> Vec<Move> {
-        let mut moves = Vec::new();
-        let piece = self.squares[rank][file];
+        let mut moves: Vec<Move> = Vec::new();
+        let piece: Piece = self.squares[rank][file];
         
         // check if the piece is a queen
         if !self.is_queen(piece) {
             return moves;
         }
 
-        let directions = [
+        let directions: [(isize, isize); 8] = [
             (1, 0), (-1, 0),
             (0, 1), (0, -1),
             (1, 1), (-1, -1),
@@ -103,10 +104,10 @@ impl Board {
         ];
         
         for (dr, df) in directions {
-            let mut new_rank = rank as isize + dr;
-            let mut new_file = file as isize + df;
+            let mut new_rank: isize = rank as isize + dr;
+            let mut new_file: isize = file as isize + df;
 
-            while self.in_bounds((new_rank, new_file)) {
+            while in_bounds(new_rank, new_file) {
                 let target_piece = self.squares[new_rank as usize][new_file as usize];
 
                 if self.is_empty(target_piece) {

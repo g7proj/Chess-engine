@@ -1,4 +1,5 @@
 use crate::board::{Board, Piece};
+use crate::constants::{FILES, in_bounds};
 use crate::moves::Move;
 
 impl Board {
@@ -17,9 +18,9 @@ impl Board {
         let f = file as isize;
     
         // 1. Single move (one step forward)
-        let one_step = (r + forward, f);
-        if self.in_bounds(one_step) {
-            let (nr, nf) = one_step;
+        let (one_step_r, one_step_f) = (r + forward, f);
+        if in_bounds(one_step_r, one_step_f) {
+            let (nr, nf) = (one_step_r, one_step_f);
             if self.squares[nr as usize][nf as usize] == Empty {
                 // promotion?
                 if nr as usize == promotion_rank {
@@ -30,9 +31,9 @@ impl Board {
     
                 // 2. Double move (only if the single move is free)
                 if rank == start_rank {
-                    let two_step = (r + forward * 2, f);
-                    if self.in_bounds(two_step) {
-                        let (tr, tf) = two_step;
+                    let (two_step_r, two_step_f) = (r + forward * 2, f);
+                    if in_bounds(two_step_r, two_step_f) {
+                        let (tr, tf) = (two_step_r, two_step_f);
                         if self.squares[tr as usize][tf as usize] == Empty {
                             moves.push(Move::new(rank, file, tr as usize, tf as usize));
                         }
@@ -43,9 +44,9 @@ impl Board {
     
         // 3. Diagonal captures
         for df in [-1, 1] {
-            let diag = (r + forward, f + df);
-            if self.in_bounds(diag) {
-                let (nr, nf) = diag;
+            let (diag_r, diag_f) = (r + forward, f + df);
+            if in_bounds(diag_r, diag_f) {
+                let (nr, nf) = (diag_r, diag_f);
                 let target = self.squares[nr as usize][nf as usize];
     
                 if target != Empty && !self.same_color(piece, target) {
@@ -62,7 +63,7 @@ impl Board {
         if let Some((ep_r, ep_f)) = self.en_passant {
             for df in [-1, 1] {
                 let target_file = f + df;
-                if target_file >= 0 && target_file < 8 {
+                if target_file >= 0 && target_file < FILES as isize {
                     let attack_r = r + forward;
                     if attack_r == ep_r as isize && target_file == ep_f as isize {
                         moves.push(Move::new(rank, file, ep_r, ep_f));
@@ -94,24 +95,25 @@ impl Board {
 
 #[cfg(test)]
 mod tests {
+    use crate::constants::{FILES, RANKS};
+
     use super::*;
-    // use crate::moves::Move;
 
     #[test]
     fn test_pawn_initial_double_move() {
-        let board = Board::new();
+        let board: Board = Board::new();
         // retrieve the pawn moves
-        let moves = board.generate_pawn_moves(1, 3);
+        let moves: Vec<Move> = board.generate_pawn_moves(1, 3);
         // should have 2 available moves
         assert_eq!(moves.len(), 2);
     }
 
     #[test]
     fn test_pawn_en_passant() {
-        let mut board = Board::new();
+        let mut board: Board = Board::new();
         // set up board for en passant
-        for r in 0..8 {
-            for f in 0..8 {
+        for r in 0..RANKS {
+            for f in 0..FILES {
                 board.squares[r][f] = Piece::Empty;
             }
         }
