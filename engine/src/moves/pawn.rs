@@ -59,7 +59,7 @@ impl Board {
             }
         }
     
-        // 4. En passant (implement later)
+        // 4. En passant
         if let Some((ep_r, ep_f)) = self.en_passant {
             for df in [-1, 1] {
                 let target_file = f + df;
@@ -122,8 +122,23 @@ mod tests {
         board.en_passant = Some((5, 3));
 
         // generate moves for white pawn
-        let moves = board.generate_pawn_moves(4, 4);
+        let moves: Vec<Move> = board.generate_pawn_moves(4, 4);
         // Check the en passant move
         assert!(moves.iter().any(|m| m.to_rank == 5 && m.to_file == 3));
+    }
+    
+    #[test]
+    fn test_pawn_promotion_with_capture() {
+        let mut board: Board = Board::new();
+        for r in 0..RANKS {
+            for f in 0..FILES {
+                board.squares[r][f] = Piece::Empty;
+            }
+        }
+        board.squares[6][0] = Piece::PawnWhite;
+        board.squares[7][1] = Piece::RookBlack;
+        let moves: Vec<Move> = board.generate_pawn_moves(6, 0);
+        // There must be a promotion in (7,1)
+        assert!(moves.iter().any(|m| m.to_rank == 7 && m.to_file == 1 && matches!(m.promotion, crate::moves::Promotion::Queen | crate::moves::Promotion::Rook | crate::moves::Promotion::Bishop | crate::moves::Promotion::Knight)));
     }
 }

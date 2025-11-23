@@ -103,16 +103,26 @@ impl Board {
         if let Some((ep_r, ep_f)) = old_ep {
             if self.is_pawn(moving_piece) && tr == ep_r && tf == ep_f {
                 // Capture the pawn behind the EP
-                let captured_rank;
+                let captured_rank: usize;
+                let expected_captured_piece: Piece;
                 if moving_piece == PawnWhite {
                     captured_rank = tr - 1;
+                    expected_captured_piece = PawnBlack;
                 }
                 else { // Black pawn
                     captured_rank = tr + 1;
+                    expected_captured_piece = PawnWhite;
                 }
                 // Capture piece
-                println!("Captured piece: {}", self.squares[captured_rank][ep_f]);
-                self.squares[captured_rank][ep_f] = Empty;
+                let captured_piece: Piece = self.squares[captured_rank][ep_f];
+                if captured_piece == expected_captured_piece {
+                    println!("Captured piece: {}", captured_piece);
+                    self.squares[captured_rank][ep_f] = Empty;
+                }
+                else {
+                    // invalid en passant capture!
+                    println!("Invalid en passant capture attempted!");
+                }
             }
         }
         
