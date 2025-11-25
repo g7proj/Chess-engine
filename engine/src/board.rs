@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::constants::{FILES, RANKS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,6 +74,7 @@ pub struct Board {
     pub white_queenside_castle: bool,
     pub black_kingside_castle: bool,
     pub black_queenside_castle: bool,
+    pub position_history: HashMap<String, usize>,
 }
 
 impl std::fmt::Display for Board {
@@ -111,7 +114,57 @@ impl Board {
             white_queenside_castle: true,
             black_kingside_castle: true,
             black_queenside_castle: true,
+            position_history: HashMap::new(),
         }
+    }
+
+    /**
+     * Convert the board to a position string for hashing/comparison
+     * Can be improved but works for now
+     */
+    pub fn to_position_string(&self) -> String {
+        let mut pos_str: String = String::new();
+        for rank in 0..RANKS {
+            for file in 0..FILES {
+                let piece: Piece = self.squares[rank][file];
+                pos_str.push_str(&format!("{}", piece));
+            }
+        }
+        pos_str.push_str(&format!("{:?}", self.side_to_move));
+        pos_str.push_str(&format!("{:?}", self.en_passant));
+        pos_str.push_str(&format!("{}", self.white_kingside_castle));
+        pos_str.push_str(&format!("{}", self.white_queenside_castle));
+        pos_str.push_str(&format!("{}", self.black_kingside_castle));
+        pos_str.push_str(&format!("{}", self.black_queenside_castle));
+
+        pos_str
+    }
+
+    /**
+     * Check for threefold repetition draw
+     */
+    pub fn is_repetition_draw(&self) -> bool {
+        let position_string: String = self.to_position_string();
+
+        // Check how many times this position has occurred
+        let position_counter: usize = match self.position_history.get(&position_string) {
+            Some(count) => *count,
+            None => 0,
+        };
+
+        position_counter >= 3
+    }
+
+    pub fn record_position(&mut self) {
+        let position_string: String = self.to_position_string();
+
+        // Retrieve the counter (or insert one with 0 count) and increment it
+        let position_counter: &mut usize = self.position_history.entry(position_string).or_insert(0);
+        *position_counter += 1;
+    }
+
+    pub fn clear_position_history(&mut self) {
+        self.position_history.clear();
     }
 
     // check if a piece is a knight
@@ -157,11 +210,6 @@ impl Board {
             Piece::Empty
         )
     }
-
-    // pub fn in_bounds(&self, pos: (isize, isize)) -> bool {
-    //     let (r, f) = pos;
-    //     r >= 0 && r < RANKS && f >= 0 && f < FILES
-    // }
 
     pub fn is_white(&self, piece: Piece) -> bool {
         matches!(piece, Piece::PawnWhite | Piece::KnightWhite | Piece::BishopWhite | Piece::RookWhite | Piece::QueenWhite | Piece::KingWhite)

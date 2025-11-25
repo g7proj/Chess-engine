@@ -6,22 +6,22 @@ impl Board {
         use Piece::*;
         use crate::moves::Promotion;
 
-        let fr = mv.from_rank;
-        let ff = mv.from_file;
-        let tr = mv.to_rank;
-        let tf = mv.to_file;
+        let fr: usize = mv.from_rank;
+        let ff: usize = mv.from_file;
+        let tr: usize = mv.to_rank;
+        let tf: usize = mv.to_file;
 
-        let moving_piece = self.squares[fr][ff];
+        let moving_piece: Piece = self.squares[fr][ff];
 
         // Save current en passant before the reset
-        let old_ep = self.en_passant;
+        let old_ep: Option<(usize, usize)> = self.en_passant;
         // Reset en passant unless this is a double pawn move
         self.en_passant = None;
 
         // ---------------------
         // 0. Castling
         // ---------------------
-        let is_castling = self.is_king(moving_piece) &&
+        let is_castling: bool = self.is_king(moving_piece) &&
                             (
                                 (fr == 0 && ff == 4 && tr == 0 && tf == 6) || // White kingside
                                 (fr == 0 && ff == 4 && tr == 0 && tf == 2) || // White queenside
@@ -130,7 +130,7 @@ impl Board {
         // 2. Normal capture
         // ---------------------
         // Check if there is a enemy piece in the destination square
-        let destination_square = self.squares[tr][tf];
+        let destination_square: Piece = self.squares[tr][tf];
         if self.same_color(moving_piece, destination_square) {
             // invalid move!
         }
@@ -145,7 +145,7 @@ impl Board {
         // ---------------------
         // 3. Promotion
         // ---------------------
-        let piece_to_place = match (moving_piece, mv.promotion) {
+        let piece_to_place: Piece = match (moving_piece, mv.promotion) {
             (PawnWhite, Promotion::Queen) => QueenWhite,
             (PawnWhite, Promotion::Rook) => RookWhite,
             (PawnWhite, Promotion::Bishop) => BishopWhite,
@@ -182,5 +182,8 @@ impl Board {
         else {
             self.side_to_move = Color::White;
         }
+
+        // Record position in history
+        self.record_position();
     }
 }

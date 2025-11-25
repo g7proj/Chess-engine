@@ -172,4 +172,28 @@ mod tests {
         let illegal_move: Move = Move::new(1, 4, 1, 5);
         assert!(!board.is_legal_move(illegal_move));
     }
+
+    #[test]
+    fn test_repetition_draw() {
+        let mut board: Board = Board::new();
+
+        // Simulate 3 time same position
+        let pos_string: String = board.to_position_string();
+        board.position_history.insert(pos_string.clone(), 3);
+
+        let is_repetition_draw: bool = board.is_repetition_draw();
+        assert!(is_repetition_draw);
+    }
+
+    #[test]
+    fn test_repetition_draw_two_repetition() {
+        let mut board: Board = Board::new();
+
+        // Simulate 3 time same position
+        let pos_string: String = board.to_position_string();
+        board.position_history.insert(pos_string.clone(), 2);
+
+        let is_repetition_draw: bool = board.is_repetition_draw();
+        assert!(!is_repetition_draw);
+    }
 }
