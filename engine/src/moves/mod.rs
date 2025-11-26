@@ -149,7 +149,7 @@ mod tests {
         // All the move should be for the white pieces
         for mv in moves {
             let piece: Piece = board.squares[mv.from_rank][mv.from_file];
-            assert!(board.is_white(piece));
+            assert!(board.piece_color(piece) == Some(Color::White));
         }
     }
 
@@ -178,7 +178,7 @@ mod tests {
         let mut board: Board = Board::new();
 
         // Simulate 3 time same position
-        let pos_string: String = board.to_position_string();
+        let pos_string: String = board.to_fen();
         board.position_history.insert(pos_string.clone(), 3);
 
         let is_repetition_draw: bool = board.is_repetition_draw();
@@ -190,7 +190,7 @@ mod tests {
         let mut board: Board = Board::new();
 
         // Simulate 3 time same position
-        let pos_string: String = board.to_position_string();
+        let pos_string: String = board.to_fen();
         board.position_history.insert(pos_string.clone(), 2);
 
         let is_repetition_draw: bool = board.is_repetition_draw();

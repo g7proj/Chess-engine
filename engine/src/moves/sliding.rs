@@ -24,7 +24,7 @@ impl Board {
             while in_bounds(new_rank, new_file) {
                 let target_piece: Piece = self.squares[new_rank as usize][new_file as usize];
 
-                if self.is_empty(target_piece) {
+                if target_piece == Piece::Empty {
                     // if the target position is empty add to the moves
                     moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
                 }
@@ -66,7 +66,7 @@ impl Board {
             while in_bounds(new_rank, new_file) {
                 let target_piece: Piece = self.squares[new_rank as usize][new_file as usize];
 
-                if self.is_empty(target_piece) {
+                if target_piece == Piece::Empty {
                     // if the target position is empty add to the moves
                     moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
                 }
@@ -108,9 +108,9 @@ impl Board {
             let mut new_file: isize = file as isize + df;
 
             while in_bounds(new_rank, new_file) {
-                let target_piece = self.squares[new_rank as usize][new_file as usize];
+                let target_piece: Piece = self.squares[new_rank as usize][new_file as usize];
 
-                if self.is_empty(target_piece) {
+                if target_piece == Piece::Empty  {
                     // if the target position is empty add to the moves
                     moves.push(Move::new(rank, file, new_rank as usize, new_file as usize));
                 }

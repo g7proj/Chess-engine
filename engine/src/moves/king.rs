@@ -37,7 +37,7 @@ impl Board {
 
         // generate castling moves
         use Piece::*;
-        let is_white: bool = self.is_white(piece);
+        let is_white: bool = piece.color() == Some(Color::White);
         let color: Color = self.piece_color(piece).unwrap();
         let opponent_color: Color = color.opposite();
 
