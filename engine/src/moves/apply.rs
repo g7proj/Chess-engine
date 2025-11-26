@@ -191,5 +191,9 @@ impl Board {
         } else {
             self.halfmove_clock += 1;
         }
+        // Update fullmove number (after Black's move increment fullmove number)
+        if self.side_to_move == Color::White {
+            self.fullmove_number += 1;
+        }
     }
 }

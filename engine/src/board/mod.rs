@@ -19,8 +19,9 @@ pub struct Board {
     pub white_queenside_castle: bool,
     pub black_kingside_castle: bool,
     pub black_queenside_castle: bool,
-    pub position_history: HashMap<String, usize>,
+    pub history: HashMap<String, usize>,
     pub halfmove_clock: usize,
+    pub fullmove_number: usize,
 }
 
 impl Board {
@@ -44,8 +45,9 @@ impl Board {
             white_queenside_castle: true,
             black_kingside_castle: true,
             black_queenside_castle: true,
-            position_history: HashMap::new(),
+            history: HashMap::new(),
             halfmove_clock: 0,
+            fullmove_number: 0,
         }
     }
 }

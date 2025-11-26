@@ -179,7 +179,7 @@ mod tests {
 
         // Simulate 3 time same position
         let pos_string: String = board.to_fen();
-        board.position_history.insert(pos_string.clone(), 3);
+        board.history.insert(pos_string.clone(), 3);
 
         let is_repetition_draw: bool = board.is_repetition_draw();
         assert!(is_repetition_draw);
@@ -191,7 +191,7 @@ mod tests {
 
         // Simulate 3 time same position
         let pos_string: String = board.to_fen();
-        board.position_history.insert(pos_string.clone(), 2);
+        board.history.insert(pos_string.clone(), 2);
 
         let is_repetition_draw: bool = board.is_repetition_draw();
         assert!(!is_repetition_draw);

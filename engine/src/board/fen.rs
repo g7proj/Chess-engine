@@ -155,6 +155,7 @@ impl std::fmt::Display for Board {
         }
         writeln!(f, "  a b c d e f g h")?;
         writeln!(f, "Side to move: {}", self.side_to_move.to_fen_char())?;
+        writeln!(f, "Fullmove number: {}", self.fullmove_number)?;
         Ok(())
     }
 }

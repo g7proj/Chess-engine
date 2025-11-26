@@ -6,13 +6,13 @@ use std::collections::HashMap;
 impl Board {
     pub fn record_position(&mut self) {
         let fen: String = self.to_fen();
-        let position_counter: &mut usize = self.position_history.entry(fen).or_insert(0);
+        let position_counter: &mut usize = self.history.entry(fen).or_insert(0);
         *position_counter += 1;
     }
 
     pub fn is_repetition_draw(&self) -> bool {
         let fen: String = self.to_fen();
-        if let Some(&count) = self.position_history.get(&fen) {
+        if let Some(&count) = self.history.get(&fen) {
             count >= 3
         } else {
             false
@@ -24,7 +24,7 @@ impl Board {
     }
 
     pub fn clear_position_history(&mut self) {
-        self.position_history.clear();
+        self.history.clear();
     }
 
     pub fn is_insufficient_material(&self) -> bool {
@@ -81,7 +81,7 @@ mod tests {
     fn test_repetition_draw_with_fen() {
         let mut board = Board::new();
         let fen = board.to_fen();
-        board.position_history.insert(fen.clone(), 3);
+        board.history.insert(fen.clone(), 3);
         assert!(board.is_repetition_draw());
     }
 
