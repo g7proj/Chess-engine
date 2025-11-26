@@ -185,5 +185,11 @@ impl Board {
 
         // Record position in history
         self.record_position();
+        // Update halfmove clock
+        if self.is_pawn(moving_piece) || destination_square != Piece::Empty {
+            self.halfmove_clock = 0;
+        } else {
+            self.halfmove_clock += 1;
+        }
     }
 }

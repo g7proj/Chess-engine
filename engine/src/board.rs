@@ -75,6 +75,7 @@ pub struct Board {
     pub black_kingside_castle: bool,
     pub black_queenside_castle: bool,
     pub position_history: HashMap<String, usize>,
+    pub halfmove_clock: usize, // counts halfmoves since last pawn move or capture (for 50-move draw rule)
 }
 
 impl std::fmt::Display for Board {
@@ -115,6 +116,7 @@ impl Board {
             black_kingside_castle: true,
             black_queenside_castle: true,
             position_history: HashMap::new(),
+            halfmove_clock: 0,
         }
     }
 
@@ -153,6 +155,10 @@ impl Board {
         };
 
         position_counter >= 3
+    }
+
+    pub fn is_50_move_draw(&self) -> bool {
+        self.halfmove_clock >= 100
     }
 
     pub fn record_position(&mut self) {

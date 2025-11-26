@@ -196,4 +196,26 @@ mod tests {
         let is_repetition_draw: bool = board.is_repetition_draw();
         assert!(!is_repetition_draw);
     }
+
+    #[test]
+    fn test_50_move_draw() {
+        let mut board: Board = Board::new();
+
+        // Simulate 100 halfmoves without pawn move or capture
+        board.halfmove_clock = 100;
+
+        let is_50_move_draw: bool = board.is_50_move_draw();
+        assert!(is_50_move_draw);
+    }
+
+    #[test]
+    fn test_not_50_move_draw() {
+        let mut board: Board = Board::new();
+
+        // Simulate 99 halfmoves without pawn move or capture
+        board.halfmove_clock = 99;
+
+        let is_50_move_draw: bool = board.is_50_move_draw();
+        assert!(!is_50_move_draw);
+    }
 }
