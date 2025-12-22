@@ -1,5 +1,5 @@
 use std::io::{self, BufRead};
-use crate::board::Board;
+use crate::board::{Board};
 use crate::moves::{Move, Promotion};
 
 /**
@@ -67,6 +67,10 @@ fn parse_move_str(mv_str: &str) -> Option<Move> {
     })
 }
 
+/**
+ * Convert a Move struct into UCI format string
+ * Example: Move { from_rank: 1, from_file: 4, to_rank: 3, to_file: 4, promotion: None } -> "e2e4"
+ */
 fn move_to_uci(mv: &Move) -> String {
     let from_file: char = (b'a' + mv.from_file as u8) as char;
     let from_rank: char = (b'1' + mv.from_rank as u8) as char;
@@ -86,6 +90,9 @@ fn move_to_uci(mv: &Move) -> String {
     uci_str
 }
 
+/**
+ * Run the UCI loop, reading commands from stdin and responding appropriately
+ */
 pub fn run_uci() {
     let stdin: io::Stdin = io::stdin();
     let mut board: Board = Board::new();
@@ -107,28 +114,8 @@ pub fn run_uci() {
             cmd if cmd.starts_with("position") => {
                 // Example commands:
                 // position [fen <fenstring> | startpos ]  moves <move1> .... <movei>
-                let parts: Vec<&str> = cmd.split_whitespace().collect();
-                if parts.len() >= 2 && parts[1] == "startpos" {
-                    board = Board::new();
-                    // find moves keyword
-                    if let Some(pos) = parts.iter().position(|&p| p == "moves") {
-                        for mv_str in &parts[pos+1..] {
-                            if let Some(mv) = parse_move_str(mv_str) {
-                                board.make_move(mv);
-                            }
-                        }
-                    }
-                } else if parts.len() >= 3 && parts[1] == "fen" {
-                    // minimal FEN: not fully supported -> ignore for now
-                    // TODO: implement FEN parser
-                    // apply moves if present
-                    if let Some(pos) = parts.iter().position(|&p| p == "moves") {
-                        for mv_str in &parts[pos+1..] {
-                            if let Some(mv) = parse_move_str(mv_str) {
-                                board.make_move(mv);
-                            }
-                        }
-                    }
+                if let Err(e) = handle_position(cmd, &mut board) {
+                    println!("info string Error handling position command: {}", e);
                 }
             }
             cmd if cmd.starts_with("go") => {
@@ -149,5 +136,106 @@ pub fn run_uci() {
                 println!("Unknown command: {}", other);
             }
         }
+    }
+}
+
+/**
+ * Handle the "position" UCI command to set up the board position
+ * Examples:
+ * position startpos moves e2e4 e7e5
+ * position fen <fenstring> moves e2e4 e7e5
+ */
+pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.len() < 2 {
+        return Err("position command too short".to_string());
+    }
+
+    if parts[1] == "startpos" {
+        *board = Board::new();
+        board.record_position();
+
+        if let Some(pos) = parts.iter().position(|&p| p == "moves") {
+            for mv_str in &parts[pos + 1..] {
+                let mv = parse_move_str(mv_str).ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
+                if board.generate_all_legal_moves().contains(&mv) {
+                    board.make_move(mv);
+                    board.record_position();
+                } else {
+                    // ignore illegal move, report via info string on caller's side if needed
+                }
+            }
+        }
+        Ok(())
+    } else if parts[1] == "fen" {
+        let move_pos = parts.iter().position(|&p| p == "moves").unwrap_or(parts.len());
+        let fen_parts = &parts[2..move_pos];
+        if fen_parts.is_empty() {
+            return Err("Missing FEN string".to_string());
+        }
+        let fen = fen_parts.join(" ");
+        match Board::from_fen(&fen) {
+            Ok(new_board) => {
+                *board = new_board;
+                board.record_position();
+
+                if move_pos < parts.len() {
+                    for mv_str in &parts[move_pos + 1..] {
+                        let mv = parse_move_str(mv_str).ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
+                        if board.generate_all_legal_moves().contains(&mv) {
+                            board.make_move(mv);
+                            board.record_position();
+                        } else {
+                            // ignore illegal move
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => Err(format!("Error parsing FEN: {}", e)),
+        }
+    } else {
+        Err("Unknown position command".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::board::{Board, Piece};
+
+    #[test]
+    fn test_handle_position_fen_applies_moves_and_records() {
+        let start_fen: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let cmd: String = format!("position fen {} moves e2e4 e7e5", start_fen);
+        let mut board: Board = Board::new(); // will be replaced by FEN
+        assert!(handle_position(&cmd, &mut board).is_ok());
+
+        // e2 -> e4 (white pawn at rank 3,file 4)
+        assert_eq!(board.squares[3][4], Piece::PawnWhite);
+        // e7 -> e5 (black pawn at rank 4,file 4)
+        assert_eq!(board.squares[4][4], Piece::PawnBlack);
+
+        // history must contain the initial FEN and later positions (at least one entry)
+        let initial_fen: String = start_fen.to_string();
+        assert_eq!(board.history.get(&initial_fen), Some(&1));
+    }
+
+    #[test]
+    fn test_handle_position_startpos_ignores_illegal_move() {
+        let cmd: String = "position startpos moves e2e5".to_string(); // illegal: pawn can't jump to e5
+        let mut board: Board = Board::new();
+        assert!(handle_position(&cmd, &mut board).is_ok());
+
+        // pawn must remain on e2 (rank 1,file 4)
+        assert_eq!(board.squares[1][4], Piece::PawnWhite);
+    }
+
+    #[test]
+    fn test_handle_position_invalid_fen_returns_error() {
+        let cmd: String = "position fen invalid_fen_string".to_string();
+        let mut board: Board = Board::new();
+        let res: Result<(), String> = handle_position(&cmd, &mut board);
+        assert!(res.is_err());
     }
 }

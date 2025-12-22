@@ -6,7 +6,7 @@ pub mod sliding;
 pub mod attacks;
 pub mod apply;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Promotion {
     Queen,
     Rook,
@@ -15,7 +15,7 @@ pub enum Promotion {
     None,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Move {
     pub from_rank: usize,
     pub from_file: usize,
