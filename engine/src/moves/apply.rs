@@ -187,13 +187,65 @@ impl Board {
         self.record_position();
         // Update halfmove clock
         if self.is_pawn(moving_piece) || destination_square != Piece::Empty {
+            // pawn moved or capture occurred => reset halfmove clock
             self.halfmove_clock = 0;
         } else {
+            // no pawn move and no capture => increment halfmove clock
             self.halfmove_clock += 1;
         }
         // Update fullmove number (after Black's move increment fullmove number)
         if self.side_to_move == Color::White {
             self.fullmove_number += 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::board::{Board, Piece, Color};
+    use crate::moves::Move;
+
+    #[test]
+    fn test_make_move_records_position() {
+        let mut b: Board = Board::new();
+        assert!(b.history.is_empty());
+        let mv: Move = Move::new(1, 4, 3, 4); // e2e4
+        b.make_move(mv);
+        let fen: String = b.to_fen();
+        assert_eq!(b.history.get(&fen), Some(&1));
+    }
+
+    #[test]
+    fn test_halfmove_clock_behavior() {
+        let mut b: Board = Board::new();
+        assert_eq!(b.halfmove_clock, 0);
+        b.make_move(Move::new(1,4,3,4)); // e2e4 pawn
+        assert_eq!(b.halfmove_clock, 0);
+        b.make_move(Move::new(6,4,4,4)); // e7e5 pawn
+        assert_eq!(b.halfmove_clock, 0);
+        b.make_move(Move::new(0,6,2,5)); // g1f3 knight
+        assert_eq!(b.halfmove_clock, 1);
+
+        // capture resets halfmove clock
+        let mut c: Board = Board::new();
+        for r in 0..8 { for f in 0..8 { c.squares[r][f] = Piece::Empty; } }
+        c.squares[0][4] = Piece::KingWhite;
+        c.squares[7][4] = Piece::KingBlack;
+        c.squares[4][4] = Piece::PawnWhite;
+        c.squares[5][5] = Piece::PawnBlack;
+        c.side_to_move = Color::White;
+        c.halfmove_clock = 10;
+        c.make_move(Move::new(4,4,5,5)); // capture pawn
+        assert_eq!(c.halfmove_clock, 0);
+    }
+
+    #[test]
+    fn test_fullmove_number_increment() {
+        let mut b: Board = Board::new();
+        assert_eq!(b.fullmove_number, 0);
+        b.make_move(Move::new(1,4,3,4)); // e2e4 white
+        assert_eq!(b.fullmove_number, 0);
+        b.make_move(Move::new(6,4,4,4)); // e7e5 black
+        assert_eq!(b.fullmove_number, 1);
     }
 }
