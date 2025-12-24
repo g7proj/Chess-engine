@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{self, BufRead};
 use crate::board::{Board};
 use crate::moves::{Move, Promotion};
@@ -96,6 +97,7 @@ fn move_to_uci(mv: &Move) -> String {
 pub fn run_uci() {
     let stdin: io::Stdin = io::stdin();
     let mut board: Board = Board::new();
+    let mut options: HashMap<String, String> = HashMap::new();
 
     for line in stdin.lock().lines() {
         let command: String = line.unwrap();
@@ -107,6 +109,9 @@ pub fn run_uci() {
             }
             "isready" => {
                 println!("readyok");
+            }
+            "ucinewgame" => {
+                handle_ucinewgame(&mut board, &mut options);
             }
             "quit" => {
                 break;
@@ -129,14 +134,58 @@ pub fn run_uci() {
                     println!("bestmove {}", best_uci);
                 }
             }
+            cmd if cmd.starts_with("stop") => {
+                handle_stop();
+            }
+            cmd if cmd.starts_with("ponderhit") => {
+                handle_ponderhit();
+            }
             cmd if cmd.starts_with("setoption") => {
-                // For now, ignore options
+                handle_setoption(cmd, &mut options);
             }
             other => {
                 println!("Unknown command: {}", other);
             }
         }
     }
+}
+
+/**
+ * Handle ucinewgame command to reset the board and options
+ */
+pub fn handle_ucinewgame(board: &mut Board, options: &mut HashMap<String, String>) {
+    *board = Board::new();
+    board.record_position();
+    options.clear();
+    // Reset any other state as needed
+}
+
+/**
+ * Simple setoption parser
+ */
+pub fn handle_setoption(cmd: &str, options: &mut HashMap<String, String>) {
+    // Example: setoption name Hash value 128
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if let Some(name_idx) = parts.iter().position(|p| *p == "name") {
+        let value_idx: usize = parts.iter().position(|p| *p == "value").unwrap_or(parts.len());
+        if name_idx + 1 <= value_idx {
+            let name: String = parts[name_idx + 1..value_idx].join(" ");
+            let value: String = if value_idx < parts.len() {
+                parts[value_idx + 1..].join(" ")
+            } else {
+                String::new()
+            };
+            options.insert(name, value);
+        }
+    }
+}
+
+pub fn handle_stop() {
+    // Placeholder for stopping search
+}
+
+pub fn handle_ponderhit() {
+    // Placeholder for handling ponderhit
 }
 
 /**
@@ -237,5 +286,34 @@ mod tests {
         let mut board: Board = Board::new();
         let res: Result<(), String> = handle_position(&cmd, &mut board);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_handle_ucinewgame_resets_board() {
+        let mut board: Board = Board::new();
+        // apply a legal move e2e4
+        let mv: Move = parse_move_str("e2e4").unwrap();
+        assert!(board.generate_all_legal_moves().contains(&mv));
+        board.make_move(mv);
+        assert_eq!(board.squares[3][4], Piece::PawnWhite);
+
+        let mut options: HashMap<String, String> = HashMap::new();
+        options.insert("Hash".to_string(), "128".to_string());
+
+        handle_ucinewgame(&mut board, &mut options);
+
+        // pawn must be back at e2 and options cleared
+        assert_eq!(board.squares[1][4], Piece::PawnWhite);
+        assert!(options.is_empty());
+    }
+
+    #[test]
+    fn test_handle_setoption_parses_name_and_value() {
+        let mut options: HashMap<String, String> = HashMap::new();
+        handle_setoption("setoption name Hash value 256", &mut options);
+        assert_eq!(options.get("Hash"), Some(&"256".to_string()));
+
+        handle_setoption("setoption name UCI_AnalyseMode value true", &mut options);
+        assert_eq!(options.get("UCI_AnalyseMode"), Some(&"true".to_string()));
     }
 }
