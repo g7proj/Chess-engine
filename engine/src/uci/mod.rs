@@ -206,7 +206,8 @@ mod tests {
 
     #[test]
     fn test_handle_position_fen_applies_moves_and_records() {
-        let start_fen: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let start_pos: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+        let start_fen: String = format!("{} w KQkq - 0 1", start_pos);
         let cmd: String = format!("position fen {} moves e2e4 e7e5", start_fen);
         let mut board: Board = Board::new(); // will be replaced by FEN
         assert!(handle_position(&cmd, &mut board).is_ok());
@@ -216,9 +217,8 @@ mod tests {
         // e7 -> e5 (black pawn at rank 4,file 4)
         assert_eq!(board.squares[4][4], Piece::PawnBlack);
 
-        // history must contain the initial FEN and later positions (at least one entry)
-        let initial_fen: String = start_fen.to_string();
-        assert_eq!(board.history.get(&initial_fen), Some(&1));
+        // history must contain the initial position and later positions (at least one entry)
+        assert_eq!(board.history.get(start_pos), Some(&1));
     }
 
     #[test]

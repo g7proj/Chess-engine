@@ -178,7 +178,7 @@ mod tests {
         let mut board: Board = Board::new();
 
         // Simulate 3 time same position
-        let pos_string: String = board.to_fen();
+        let pos_string: String = board.position_string();
         board.history.insert(pos_string.clone(), 3);
 
         let is_repetition_draw: bool = board.is_repetition_draw();

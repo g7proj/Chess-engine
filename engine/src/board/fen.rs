@@ -1,11 +1,11 @@
 use super::{Board, Piece, Color};
 
 impl Board {
-    /// Generate a FEN string representing the current board position
-    pub fn to_fen(&self) -> String {
-        let mut fen = String::new();
+    /// Generate a FEN position string (piece placement only)
+    pub fn position_string(&self) -> String {
+        let mut position_string: String = String::new();
 
-        // 1. Piece placement (from white's perspective)
+        // Piece placement (from white's perspective)
         for rank in (0..8).rev() {
             let mut empty_count = 0;
             for file in 0..8 {
@@ -14,20 +14,26 @@ impl Board {
                     empty_count += 1;
                 } else {
                     if empty_count > 0 {
-                        fen.push_str(&empty_count.to_string());
+                        position_string.push_str(&empty_count.to_string());
                         empty_count = 0;
                     }
-                    fen.push(piece.to_fen_char());
+                    position_string.push(piece.to_fen_char());
                 }
             }
             if empty_count > 0 {
-                fen.push_str(&empty_count.to_string());
+                position_string.push_str(&empty_count.to_string());
             }
             if rank > 0 {
-                fen.push('/');
+                position_string.push('/');
             }
         }
+        position_string
+    }
 
+    /// Generate a FEN string representing the current board position
+    pub fn to_fen(&self) -> String {
+        // 1. Piece placement (from white's perspective)
+        let mut fen: String = self.position_string();
         fen.push(' ');
 
         // 2. Active color

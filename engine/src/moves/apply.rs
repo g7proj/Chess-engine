@@ -211,8 +211,8 @@ mod tests {
         assert!(b.history.is_empty());
         let mv: Move = Move::new(1, 4, 3, 4); // e2e4
         b.make_move(mv);
-        let fen: String = b.to_fen();
-        assert_eq!(b.history.get(&fen), Some(&1));
+        let position_string: String = b.position_string();
+        assert_eq!(b.history.get(&position_string), Some(&1));
     }
 
     #[test]
