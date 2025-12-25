@@ -134,6 +134,13 @@ pub fn run_uci() {
                     println!("bestmove {}", best_uci);
                 }
             }
+            cmd if cmd.starts_with("listmoves") => {
+                handle_listmoves(&board);
+            }
+            cmd if cmd.starts_with("showfen") => {
+                // Print current position FEN
+                println!("fen {}", board.to_fen());
+            }
             cmd if cmd.starts_with("stop") => {
                 handle_stop();
             }
@@ -177,6 +184,20 @@ pub fn handle_setoption(cmd: &str, options: &mut HashMap<String, String>) {
             };
             options.insert(name, value);
         }
+    }
+}
+
+pub fn handle_listmoves(board: &Board) {
+    // Print all legal moves in UCI format on one line prefixed by "legalmoves"
+    let moves: Vec<Move> = board.generate_all_legal_moves();
+    let mut parts: Vec<String> = Vec::new();
+    for m in moves.iter() {
+        parts.push(move_to_uci(m));
+    }
+    if parts.is_empty() {
+        println!("legalmoves");
+    } else {
+        println!("legalmoves {}", parts.join(" "));
     }
 }
 
@@ -315,5 +336,22 @@ mod tests {
 
         handle_setoption("setoption name UCI_AnalyseMode value true", &mut options);
         assert_eq!(options.get("UCI_AnalyseMode"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_listmoves() {
+        let board: Board = Board::new();
+        let moves: Vec<Move> = board.generate_all_legal_moves();
+        let mut expected_uci_moves: Vec<String> = Vec::new();
+        for m in moves.iter() {
+            expected_uci_moves.push(move_to_uci(m));
+        }
+        expected_uci_moves.sort();
+
+        // Non si tenta più di sostituire stdout.lock(); si verifica direttamente la lista di mosse UCI
+        let mut actual_uci_moves: Vec<String> = board.generate_all_legal_moves().iter().map(|m| move_to_uci(m)).collect();
+        actual_uci_moves.sort();
+
+        assert_eq!(expected_uci_moves, actual_uci_moves);
     }
 }
