@@ -134,13 +134,6 @@ pub fn run_uci() {
                     println!("bestmove {}", best_uci);
                 }
             }
-            cmd if cmd.starts_with("listmoves") => {
-                handle_listmoves(&board);
-            }
-            cmd if cmd.starts_with("showfen") => {
-                // Print current position FEN
-                println!("fen {}", board.to_fen());
-            }
             cmd if cmd.starts_with("stop") => {
                 handle_stop();
             }
