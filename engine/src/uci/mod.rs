@@ -1,55 +1,8 @@
 use std::collections::HashMap;
-use std::io::{self, BufRead, Write};
-use std::fs::OpenOptions;
+use std::io::{self, BufRead};
 use crate::board::{Board, Piece};
 use crate::moves::{Move, Promotion};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LogLevel {
-    Debug,
-    Info,
-    Warning,
-    Error,
-}
-
-static mut CURRENT_LOG_LEVEL: LogLevel = LogLevel::Info;
-
-/**
- * Write a debug message to engine_debug.log
- */
-fn log(log_level: LogLevel, msg: &str) {
-    unsafe {
-        if (log_level as u8) < (CURRENT_LOG_LEVEL as u8) {
-            return;
-        }
-    }
-    if let Ok(mut file) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("engine_debug.log")
-    {
-        let _ = writeln!(file, "{}", msg);
-    }
-}
-
-/**
- * Convenience functions for different log levels
- */
-fn log_debug(msg: &str) {
-    log(LogLevel::Debug, msg);
-}
-
-fn log_info(msg: &str) {
-    log(LogLevel::Info, msg);
-}
-
-fn log_warning(msg: &str) {
-    log(LogLevel::Warning, msg);
-}
-
-fn log_error(msg: &str) {
-    log(LogLevel::Error, msg);
-}
+use crate::logger::{Logger};
 
 /**
  * Parse a square in algebraic notation (e.g. "e4") into (rank, file) indices
@@ -183,7 +136,7 @@ fn minimax(board: Board, depth: usize) -> i32 {
     }
 
     let moves: Vec<Move> = board.generate_all_legal_moves();
-    log_debug(&format!("minimax depth={} moves={}", depth, moves.len()));
+    Logger::debug(&format!("minimax depth={} moves={}", depth, moves.len()));
     if moves.is_empty() {
         // Check for checkmate or stalemate
         if board.is_in_check(board.side_to_move) {
@@ -208,12 +161,12 @@ fn minimax(board: Board, depth: usize) -> i32 {
  * Find the best move using Minimax algorithm
  */
 fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
-    log_debug("find_best_move: starting");
+    Logger::debug("find_best_move: starting");
     let moves = board.generate_all_legal_moves();
-    log_debug(&format!("find_best_move: found {} legal moves", moves.len()));
+    Logger::debug(&format!("find_best_move: found {} legal moves", moves.len()));
 
     if moves.is_empty() {
-        log_debug("find_best_move: no legal moves found");
+        Logger::debug("find_best_move: no legal moves found");
         return None;
     }
 
@@ -236,7 +189,9 @@ fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
 
 
 pub fn run_uci() {
-    log_info("\n=== Engine started ===");
+    // Initialize logger with desired log level and file path
+    Logger::init(crate::logger::LogLevel::Info, "engine_debug.log");
+    Logger::info("\n=== Engine started ===");
     let stdin: io::Stdin = io::stdin();
     let mut board: Board = Board::new();
     let mut options: HashMap<String, String> = HashMap::new();
@@ -245,11 +200,11 @@ pub fn run_uci() {
         let command: String = match line {
             Ok(cmd) => cmd,
             Err(e) => {
-                log_error(&format!("ERROR reading stdin: {}", e));
+                Logger::error(&format!("ERROR reading stdin: {}", e));
                 break;
             }
         };
-        log_info(&format!("CMD: {}", command));
+        Logger::info(&format!("CMD: {}", command));
         match command.as_str() {
             "uci" => {
                 println!("id name Rust Chess Engine");
@@ -268,25 +223,25 @@ pub fn run_uci() {
             cmd if cmd.starts_with("position") => {
                 // Example commands:
                 // position [fen <fenstring> | startpos ]  moves <move1> .... <movei>
-                log_info(&format!("Handling position: {}", cmd));
+                Logger::info(&format!("Handling position: {}", cmd));
                 if let Err(e) = handle_position(cmd, &mut board) {
-                    log_error(&format!("ERROR in position command: {}", e));
+                    Logger::error(&format!("ERROR in position command: {}", e));
                     println!("info string Error handling position command: {}", e);
                 } else {
-                    log_info("Position handled successfully");
+                    Logger::info("Position handled successfully");
                 }
             }
             cmd if cmd.starts_with("go") => {
                 // Use Minimax to find the best move (depth 3)
-                log_info("Processing GO command");
+                Logger::info("Processing GO command");
                 match find_best_move(&board, 3) {
                     Some(best) => {
                         let best_uci: String = move_to_uci(&best);
-                        log_info(&format!("Found best move: {}", best_uci));
+                        Logger::info(&format!("Found best move: {}", best_uci));
                         println!("bestmove {}", best_uci);
                     }
                     None => {
-                        log_info("No legal moves found");
+                        Logger::info("No legal moves found");
                         println!("bestmove (none)");
                     }
                 }
@@ -301,12 +256,12 @@ pub fn run_uci() {
                 handle_setoption(cmd, &mut options);
             }
             other => {
-                log_info(&format!("Unknown command: {}", other));
+                Logger::info(&format!("Unknown command: {}", other));
                 println!("Unknown command: {}", other);
             }
         }
     }
-    log_info("=== Engine shutdown ===");
+    Logger::info("=== Engine shutdown ===");
 }
 
 /**
