@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead};
+use std::time::Instant;
 use crate::board::{Board, Piece};
 use crate::moves::{Move, Promotion};
 use crate::logger::{Logger};
@@ -187,6 +188,142 @@ fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
     Some(best_move)
 }
 
+fn parse_perft_depth(cmd: &str) -> Result<usize, String> {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err("empty perft command".to_string());
+    }
+
+    let depth_str = if parts[0] == "perft" {
+        parts.get(1).copied()
+    } else if parts[0] == "divide" {
+        parts.get(1).copied()
+    } else if parts[0] == "go" && parts.get(1) == Some(&"perft") {
+        parts.get(2).copied()
+    } else if parts[0] == "go" && parts.get(1) == Some(&"divide") {
+        parts.get(2).copied()
+    } else {
+        None
+    };
+
+    let depth_str = depth_str.ok_or_else(|| "missing perft depth".to_string())?;
+    let depth: usize = depth_str
+        .parse()
+        .map_err(|_| format!("invalid perft depth: {}", depth_str))?;
+    Ok(depth)
+}
+
+pub fn handle_perft(cmd: &str, board: &Board) -> Result<u64, String> {
+    let depth: usize = parse_perft_depth(cmd)?;
+    Ok(board.perft(depth))
+}
+
+fn divide_root_moves(board: &Board, depth: usize) -> Vec<(String, u64)> {
+    let mut entries: Vec<(String, u64)> = Vec::new();
+
+    for mv in board.generate_all_legal_moves() {
+        let mut next: Board = board.clone();
+        next.make_move(mv);
+        let nodes: u64 = if depth <= 1 { 1 } else { next.perft(depth - 1) };
+        entries.push((move_to_uci(&mv), nodes));
+    }
+
+    entries
+}
+
+pub fn handle_divide(cmd: &str, board: &Board) -> Result<Vec<(String, u64)>, String> {
+    let depth: usize = parse_perft_depth(cmd)?;
+    if depth == 0 {
+        return Err("divide depth must be at least 1".to_string());
+    }
+    Ok(divide_root_moves(board, depth))
+}
+
+fn print_perft_result(nodes: u64, depth: usize, prefix: &str, elapsed_ms: Option<u128>) {
+    println!("{}perft depth {} nodes {}", prefix, depth, nodes);
+    if let Some(ms) = elapsed_ms {
+        println!("{}time {} ms", prefix, ms);
+    }
+}
+
+fn print_divide_result(entries: &[(String, u64)], depth: usize, prefix: &str, elapsed_ms: Option<u128>) {
+    let total: u64 = entries.iter().map(|(_, nodes)| *nodes).sum();
+    println!("{}divide depth {}", prefix, depth);
+    for (mv, nodes) in entries {
+        println!("{}  {} {}", prefix, mv, nodes);
+    }
+    println!("{}total {}", prefix, total);
+    if let Some(ms) = elapsed_ms {
+        println!("{}time {} ms", prefix, ms);
+    }
+}
+
+pub fn run_cli(args: &[String]) -> Result<(), String> {
+    let mut mode: Option<&str> = None;
+    let mut depth: Option<usize> = None;
+    let mut fen: Option<String> = None;
+
+    let mut i: usize = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--perft" => {
+                mode = Some("perft");
+                i += 1;
+                let depth_str = args.get(i).ok_or_else(|| "missing depth after --perft".to_string())?;
+                depth = Some(depth_str.parse().map_err(|_| format!("invalid depth: {}", depth_str))?);
+            }
+            "--divide" => {
+                mode = Some("divide");
+                i += 1;
+                let depth_str = args.get(i).ok_or_else(|| "missing depth after --divide".to_string())?;
+                depth = Some(depth_str.parse().map_err(|_| format!("invalid depth: {}", depth_str))?);
+            }
+            "--fen" => {
+                i += 1;
+                fen = Some(args.get(i).ok_or_else(|| "missing FEN after --fen".to_string())?.clone());
+            }
+            "--startpos" => {
+                fen = None;
+            }
+            "--help" | "-h" => {
+                println!("Usage:");
+                println!("  engine --perft <depth> [--fen <fen>]");
+                println!("  engine --divide <depth> [--fen <fen>]");
+                println!("If --fen is omitted, start position is used.");
+                return Ok(());
+            }
+            other => {
+                return Err(format!("unknown CLI flag: {}", other));
+            }
+        }
+        i += 1;
+    }
+
+    let mode = mode.ok_or_else(|| "missing CLI mode: use --perft or --divide".to_string())?;
+    let depth = depth.ok_or_else(|| "missing CLI depth".to_string())?;
+
+    let board: Board = if let Some(fen) = fen {
+        Board::from_fen(&fen)?
+    } else {
+        Board::new()
+    };
+
+    let start: Instant = Instant::now();
+    match mode {
+        "perft" => {
+            let nodes: u64 = board.perft(depth);
+            print_perft_result(nodes, depth, "", Some(start.elapsed().as_millis()));
+        }
+        "divide" => {
+            let entries: Vec<(String, u64)> = handle_divide(&format!("divide {}", depth), &board)?;
+            print_divide_result(&entries, depth, "", Some(start.elapsed().as_millis()));
+        }
+        _ => unreachable!(),
+    }
+
+    Ok(())
+}
+
 
 pub fn run_uci() {
     // Initialize logger with desired log level and file path
@@ -232,6 +369,26 @@ pub fn run_uci() {
                 }
             }
             cmd if cmd.starts_with("go") => {
+                if cmd.split_whitespace().nth(1) == Some("perft") {
+                    match handle_perft(cmd, &board) {
+                        Ok(nodes) => {
+                            let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
+                            print_perft_result(nodes, depth, "info string ", None);
+                        }
+                        Err(e) => println!("info string Error handling perft command: {}", e),
+                    }
+                    continue;
+                }
+                if cmd.split_whitespace().nth(1) == Some("divide") {
+                    match handle_divide(cmd, &board) {
+                        Ok(entries) => {
+                            let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
+                            print_divide_result(&entries, depth, "info string ", None);
+                        }
+                        Err(e) => println!("info string Error handling divide command: {}", e),
+                    }
+                    continue;
+                }
                 // Use Minimax to find the best move (depth 3)
                 Logger::info("Processing GO command");
                 match find_best_move(&board, 3) {
@@ -254,6 +411,24 @@ pub fn run_uci() {
             }
             cmd if cmd.starts_with("setoption") => {
                 handle_setoption(cmd, &mut options);
+            }
+            cmd if cmd.starts_with("perft") => {
+                match handle_perft(cmd, &board) {
+                    Ok(nodes) => {
+                        let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
+                        print_perft_result(nodes, depth, "info string ", None);
+                    }
+                    Err(e) => println!("info string Error handling perft command: {}", e),
+                }
+            }
+            cmd if cmd.starts_with("divide") => {
+                match handle_divide(cmd, &board) {
+                    Ok(entries) => {
+                        let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
+                        print_divide_result(&entries, depth, "info string ", None);
+                    }
+                    Err(e) => println!("info string Error handling divide command: {}", e),
+                }
             }
             other => {
                 Logger::info(&format!("Unknown command: {}", other));
@@ -460,5 +635,35 @@ mod tests {
         actual_uci_moves.sort();
 
         assert_eq!(expected_uci_moves, actual_uci_moves);
+    }
+
+    #[test]
+    fn test_handle_perft_parses_plain_command() {
+        let board: Board = Board::new();
+        let nodes: u64 = handle_perft("perft 1", &board).unwrap();
+        assert_eq!(nodes, 20);
+    }
+
+    #[test]
+    fn test_handle_perft_parses_go_form() {
+        let board: Board = Board::new();
+        let nodes: u64 = handle_perft("go perft 2", &board).unwrap();
+        assert_eq!(nodes, 400);
+    }
+
+    #[test]
+    fn test_handle_divide_parses_plain_command() {
+        let board: Board = Board::new();
+        let entries: Vec<(String, u64)> = handle_divide("divide 1", &board).unwrap();
+        assert_eq!(entries.len(), 20);
+        assert!(entries.iter().all(|(_, nodes)| *nodes == 1));
+    }
+
+    #[test]
+    fn test_handle_divide_parses_go_form() {
+        let board: Board = Board::new();
+        let entries: Vec<(String, u64)> = handle_divide("go divide 1", &board).unwrap();
+        assert_eq!(entries.len(), 20);
+        assert_eq!(entries.iter().map(|(_, nodes)| *nodes).sum::<u64>(), 20);
     }
 }

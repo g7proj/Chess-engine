@@ -48,6 +48,19 @@ The compiled binary is placed in:
 - `engine/target/debug/engine`
 - `engine/target/release/engine`
 
+## Command Line Mode
+
+You can run `perft` and `divide` directly from the binary without entering UCI mode.
+
+```bash
+cd engine
+cargo run -- --perft 4
+cargo run -- --divide 3
+cargo run -- --perft 3 --fen "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"
+```
+
+If `--fen` is omitted, the start position is used.
+
 ## How to use it
 
 The engine speaks UCI. You can run it from the terminal or connect it to a UCI GUI.
@@ -85,9 +98,13 @@ quit
 - `position startpos ...`
 - `position fen ...`
 - `go`
+- `go perft <depth>`
+- `go divide <depth>`
 - `stop`
 - `ponderhit`
 - `setoption name <name> value <value>`
+- `perft <depth>`
+- `divide <depth>`
 - `quit`
 
 Note: the engine supports standard UCI only. Older custom commands from the removed Python UI are no longer part of the workflow.
@@ -115,6 +132,15 @@ position startpos moves e2e4 e7e5 g1f3
 go
 ```
 
+Perft debug:
+
+```text
+perft 3
+divide 3
+```
+
+`divide` output is indented for readability, with one line per root move and a total summary.
+
 ## Tests
 
 ```bash
@@ -130,6 +156,15 @@ The test suite covers:
 - FEN parsing and generation
 - legal move generation
 - basic UCI parsing
+
+There is also an ignored benchmark test:
+
+```bash
+cd engine
+cargo test --test perft_bench -- --ignored --nocapture
+```
+
+It measures `perft` speed on known positions and prints nodes-per-second.
 
 ## Notes
 

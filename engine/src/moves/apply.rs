@@ -1,4 +1,5 @@
 use crate::board::{Board, Piece, Color};
+use crate::logger::Logger;
 use crate::moves::Move;
 
 impl Board {
@@ -116,12 +117,12 @@ impl Board {
                 // Capture piece
                 let captured_piece: Piece = self.squares[captured_rank][ep_f];
                 if captured_piece == expected_captured_piece {
-                    println!("Captured piece: {}", captured_piece);
+                    Logger::debug(&format!("Captured piece: {}", captured_piece));
                     self.squares[captured_rank][ep_f] = Empty;
                 }
                 else {
                     // invalid en passant capture!
-                    println!("Invalid en passant capture attempted!");
+                    Logger::warning("Invalid en passant capture attempted!");
                 }
             }
         }
@@ -137,7 +138,7 @@ impl Board {
         else {
             if destination_square != Piece::Empty {
                 // Capture piece
-                println!("Captured piece: {}", destination_square);
+                Logger::debug(&format!("Captured piece: {}", destination_square));
             }
         }
 
