@@ -1,29 +1,138 @@
-﻿# Chess Project
+# Chess Engine
 
-- engine/ – Rust engine
-- ui/ – (legacy) Python UI (archived)
-- ml/ – learning experiments
-- protocol/ – communication specs
+Rust chess engine with a standard UCI interface. It can be connected to any UCI-compatible GUI such as Cute Chess, Arena, or SCID.
 
-How to use the engine with an external GUI (Cute Chess / Arena)
---------------------------------------------------------------
+## What is in the repo
 
-1) Build the engine (requires Rust toolchain / cargo)
+- `engine/` - the Rust chess engine
+  - board representation
+  - move generation
+  - FEN load/save
+  - legal move filtering
+  - check, checkmate, and stalemate detection
+  - castling, en passant, and promotion support
+  - simple minimax/negamax search at depth 3
+- `ml/` - learning experiments
 
-   cd engine
-   cargo build
+## Main features
 
-   The compiled binary will be at `engine/target/debug/engine` (or `.../release/engine` for release).
+- standard starting position
+- load positions from FEN
+- generate legal moves
+- apply UCI moves
+- support castling, en passant, and promotion
+- detect check, checkmate, and stalemate
+- track repetition draws and the 50-move rule
+- write logs to `engine_debug.log`
 
-2) Load engine into Cute Chess (or another UCI-compatible GUI)
+## Requirements
 
-- Open Cute Chess (or Arena/SCID).
-- Add a new engine and point it to the compiled executable above.
-- Use standard UCI workflow: the GUI will send `uci`, `isready`, `ucinewgame`, `position` and `go`.
+- Rust toolchain with `cargo`
 
-3) Notes and testing
+## Build
 
-- This engine implements the standard UCI commands only. Custom commands previously used by the Python GUI (e.g. `listmoves`, `showfen`) were removed.
-- To verify special moves (castling, en-passant, promotions) test sequences in the GUI and confirm the engine returns `bestmove` correctly.
+```bash
+cd engine
+cargo build
+```
 
-If you want a lightweight client to exercise the engine from Python, consider using `python-chess` to build a small test harness that translates user moves into `position ... moves ...` and parses `bestmove` responses.
+For a release build:
+
+```bash
+cd engine
+cargo build --release
+```
+
+The compiled binary is placed in:
+
+- `engine/target/debug/engine`
+- `engine/target/release/engine`
+
+## How to use it
+
+The engine speaks UCI. You can run it from the terminal or connect it to a UCI GUI.
+
+### Run from terminal
+
+```bash
+cd engine
+cargo run
+```
+
+Then send UCI commands through stdin:
+
+```text
+uci
+isready
+ucinewgame
+position startpos moves e2e4 e7e5
+go
+quit
+```
+
+### Use with a GUI
+
+1. Build the engine.
+2. Open your UCI-compatible GUI.
+3. Add a new engine and point it to the compiled binary.
+4. The GUI will send commands such as `uci`, `isready`, `position`, and `go`.
+
+## Supported UCI commands
+
+- `uci`
+- `isready`
+- `ucinewgame`
+- `position startpos ...`
+- `position fen ...`
+- `go`
+- `stop`
+- `ponderhit`
+- `setoption name <name> value <value>`
+- `quit`
+
+Note: the engine supports standard UCI only. Older custom commands from the removed Python UI are no longer part of the workflow.
+
+## Examples
+
+Start position:
+
+```text
+position startpos
+go
+```
+
+FEN position:
+
+```text
+position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+go
+```
+
+Position with moves:
+
+```text
+position startpos moves e2e4 e7e5 g1f3
+go
+```
+
+## Tests
+
+```bash
+cd engine
+cargo test
+```
+
+The test suite covers:
+
+- castling
+- en passant
+- check and checkmate
+- FEN parsing and generation
+- legal move generation
+- basic UCI parsing
+
+## Notes
+
+- The engine uses a simple material evaluation.
+- Current search is a basic minimax/negamax implementation at depth 3.
+- FEN `fullmove number` handling is present, but should be revisited if game-state logic gets expanded.
