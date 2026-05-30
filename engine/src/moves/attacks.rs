@@ -58,25 +58,67 @@ impl Board {
                 if piece != Empty {
                     let piece_color: Option<Color> = self.piece_color(piece);
                     if piece_color == Some(attack_by_color) {
-                        // Generate all moves for this piece
-                        let moves = match piece {
-                            PawnWhite | PawnBlack => self.generate_pawn_moves(r, f),
-                            KnightWhite | KnightBlack => self.generate_knight_moves(r, f),
-                            BishopWhite | BishopBlack => self.generate_bishop_moves(r, f),
-                            RookWhite | RookBlack => self.generate_rook_moves(r, f),
-                            QueenWhite | QueenBlack => self.generate_queen_moves(r, f),
-                            KingWhite | KingBlack => self.generate_king_moves(r, f),
-                            _ => Vec::new(),
-                        };
-
-                        // check if one move attacks the target square
-                        for mv in moves {
-                            if mv.to_rank == rank && mv.to_file == file {
-                                return true;
-                            }
+                        if self.piece_attacks_square(piece, r, f, rank, file) {
+                            return true;
                         }
                     }
                 }
+            }
+        }
+        false
+    }
+
+    fn piece_attacks_square(
+        &self,
+        piece: Piece,
+        from_rank: usize,
+        from_file: usize,
+        target_rank: usize,
+        target_file: usize,
+    ) -> bool {
+        use Piece::*;
+
+        match piece {
+            PawnWhite => from_rank + 1 == target_rank && from_file.abs_diff(target_file) == 1,
+            PawnBlack => from_rank >= 1 && from_rank - 1 == target_rank && from_file.abs_diff(target_file) == 1,
+            KnightWhite | KnightBlack => {
+                let dr = from_rank.abs_diff(target_rank);
+                let df = from_file.abs_diff(target_file);
+                (dr == 2 && df == 1) || (dr == 1 && df == 2)
+            }
+            BishopWhite | BishopBlack => self.attacks_along_ray(from_rank, from_file, target_rank, target_file, &[(1, 1), (1, -1), (-1, 1), (-1, -1)]),
+            RookWhite | RookBlack => self.attacks_along_ray(from_rank, from_file, target_rank, target_file, &[(1, 0), (-1, 0), (0, 1), (0, -1)]),
+            QueenWhite | QueenBlack => self.attacks_along_ray(from_rank, from_file, target_rank, target_file, &[(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]),
+            KingWhite | KingBlack => {
+                let dr = from_rank.abs_diff(target_rank);
+                let df = from_file.abs_diff(target_file);
+                dr <= 1 && df <= 1 && (dr != 0 || df != 0)
+            }
+            _ => false,
+        }
+    }
+
+    fn attacks_along_ray(
+        &self,
+        from_rank: usize,
+        from_file: usize,
+        target_rank: usize,
+        target_file: usize,
+        directions: &[(isize, isize)],
+    ) -> bool {
+        for (dr, df) in directions {
+            let mut r = from_rank as isize + dr;
+            let mut f = from_file as isize + df;
+
+            while crate::constants::in_bounds(r, f) {
+                if r as usize == target_rank && f as usize == target_file {
+                    return true;
+                }
+                if self.squares[r as usize][f as usize] != Piece::Empty {
+                    break;
+                }
+                r += dr;
+                f += df;
             }
         }
         false

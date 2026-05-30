@@ -80,8 +80,7 @@ impl Board {
         fen.push(' ');
 
         // 6. Fullmove number
-        let fullmove = 1 + (self.halfmove_clock / 2);
-        fen.push_str(&fullmove.to_string());
+        fen.push_str(&self.fullmove_number.to_string());
 
         fen
     }
@@ -145,6 +144,9 @@ impl Board {
         // 5. Halfmove clock
         board.halfmove_clock = parts[4].parse().unwrap_or(0);
 
+        // 6. Fullmove number
+        board.fullmove_number = parts[5].parse().unwrap_or(1);
+
         Ok(board)
     }
 }
@@ -181,6 +183,14 @@ mod tests {
     fn test_from_fen_startpos() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
         let board = Board::from_fen(fen).unwrap();
+        assert_eq!(board.to_fen(), fen);
+    }
+
+    #[test]
+    fn test_from_fen_preserves_fullmove_number() {
+        let fen = "8/8/8/8/8/8/8/8 w - - 17 42";
+        let board = Board::from_fen(fen).unwrap();
+        assert_eq!(board.fullmove_number, 42);
         assert_eq!(board.to_fen(), fen);
     }
 }

@@ -337,7 +337,6 @@ pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
                 let mv = parse_move_str(mv_str).ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
                 if board.generate_all_legal_moves().contains(&mv) {
                     board.make_move(mv);
-                    board.record_position();
                 } else {
                     // ignore illegal move, report via info string on caller's side if needed
                 }
@@ -361,7 +360,6 @@ pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
                         let mv = parse_move_str(mv_str).ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
                         if board.generate_all_legal_moves().contains(&mv) {
                             board.make_move(mv);
-                            board.record_position();
                         } else {
                             // ignore illegal move
                         }
@@ -394,8 +392,9 @@ mod tests {
         // e7 -> e5 (black pawn at rank 4,file 4)
         assert_eq!(board.squares[4][4], Piece::PawnBlack);
 
-        // history must contain the initial position and later positions (at least one entry)
-        assert_eq!(board.history.get(start_pos), Some(&1));
+        // current position must be recorded once with full repetition key
+        let key: String = board.repetition_key();
+        assert_eq!(board.history.get(&key), Some(&1));
     }
 
     #[test]
@@ -432,6 +431,7 @@ mod tests {
 
         // pawn must be back at e2 and options cleared
         assert_eq!(board.squares[1][4], Piece::PawnWhite);
+        assert_eq!(board.fullmove_number, 1);
         assert!(options.is_empty());
     }
 

@@ -47,6 +47,26 @@ impl Move {
 }
 
 impl Board {
+    /// Count legal leaf nodes from current position.
+    pub fn perft(&self, depth: usize) -> u64 {
+        if depth == 0 {
+            return 1;
+        }
+
+        let moves: Vec<Move> = self.generate_all_legal_moves();
+        if depth == 1 {
+            return moves.len() as u64;
+        }
+
+        let mut nodes: u64 = 0;
+        for mv in moves {
+            let mut next: Board = self.clone();
+            next.make_move(mv);
+            nodes += next.perft(depth - 1);
+        }
+        nodes
+    }
+
     /**
      * Generate all legal moves for the side to move
      */
@@ -178,8 +198,8 @@ mod tests {
         let mut board: Board = Board::new();
 
         // Simulate 3 time same position
-        let pos_string: String = board.position_string();
-        board.history.insert(pos_string.clone(), 3);
+        let key: String = board.repetition_key();
+        board.history.insert(key, 3);
 
         let is_repetition_draw: bool = board.is_repetition_draw();
         assert!(is_repetition_draw);
@@ -190,8 +210,8 @@ mod tests {
         let mut board: Board = Board::new();
 
         // Simulate 3 time same position
-        let pos_string: String = board.to_fen();
-        board.history.insert(pos_string.clone(), 2);
+        let key: String = board.repetition_key();
+        board.history.insert(key, 2);
 
         let is_repetition_draw: bool = board.is_repetition_draw();
         assert!(!is_repetition_draw);

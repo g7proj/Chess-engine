@@ -211,8 +211,8 @@ mod tests {
         assert!(b.history.is_empty());
         let mv: Move = Move::new(1, 4, 3, 4); // e2e4
         b.make_move(mv);
-        let position_string: String = b.position_string();
-        assert_eq!(b.history.get(&position_string), Some(&1));
+        let key: String = b.repetition_key();
+        assert_eq!(b.history.get(&key), Some(&1));
     }
 
     #[test]
@@ -242,10 +242,10 @@ mod tests {
     #[test]
     fn test_fullmove_number_increment() {
         let mut b: Board = Board::new();
-        assert_eq!(b.fullmove_number, 0);
-        b.make_move(Move::new(1,4,3,4)); // e2e4 white
-        assert_eq!(b.fullmove_number, 0);
-        b.make_move(Move::new(6,4,4,4)); // e7e5 black
         assert_eq!(b.fullmove_number, 1);
+        b.make_move(Move::new(1,4,3,4)); // e2e4 white
+        assert_eq!(b.fullmove_number, 1);
+        b.make_move(Move::new(6,4,4,4)); // e7e5 black
+        assert_eq!(b.fullmove_number, 2);
     }
 }

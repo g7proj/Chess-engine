@@ -47,7 +47,7 @@ impl Board {
             black_queenside_castle: true,
             history: HashMap::new(),
             halfmove_clock: 0,
-            fullmove_number: 0,
+            fullmove_number: 1,
         }
     }
 }
@@ -67,6 +67,7 @@ mod test {
         assert_eq!(board.white_queenside_castle, true);
         assert_eq!(board.black_kingside_castle, true);
         assert_eq!(board.black_queenside_castle, true);
+        assert_eq!(board.fullmove_number, 1);
 
         // Check kings position
         assert_eq!(board.squares[0][4], Piece::KingWhite);
