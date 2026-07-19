@@ -11,7 +11,7 @@ Rust chess engine with a standard UCI interface. It can be connected to any UCI-
   - legal move filtering
   - check, checkmate, and stalemate detection
   - castling, en passant, and promotion support
-  - simple minimax/negamax search at depth 3
+  - alpha-beta search with basic move ordering
 - `ml/` - learning experiments
 
 ## Main features
@@ -171,5 +171,5 @@ It measures `perft` speed on known positions and prints nodes-per-second.
 ## Notes
 
 - The engine uses a simple material evaluation.
-- Current search is a basic minimax/negamax implementation at depth 3.
+- Current search is alpha-beta/negamax with simple capture, promotion, and check ordering.
 - FEN `fullmove number` handling is present, but should be revisited if game-state logic gets expanded.

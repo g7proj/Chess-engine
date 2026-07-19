@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::time::Instant;
-use crate::board::{Board, Piece};
+use crate::board::Board;
 use crate::moves::{Move, Promotion};
 use crate::logger::{Logger};
+use crate::search;
 
 /**
  * Parse a square in algebraic notation (e.g. "e4") into (rank, file) indices
@@ -91,101 +92,6 @@ fn move_to_uci(mv: &Move) -> String {
     }
 
     uci_str
-}
-
-/**
- * Evaluate the material balance on the board
- * Positive score favors white, negative favors black
- */
-fn evaluate_position(board: &Board) -> i32 {
-    let mut score: i32 = 0;
-    for rank in 0..8 {
-        for file in 0..8 {
-            score += piece_value(board.squares[rank][file]);
-        }
-    }
-    score
-}
-
-/**
- * Get the point value of a piece
- */
-fn piece_value(piece: Piece) -> i32 {
-    match piece {
-        Piece::PawnWhite => 1,
-        Piece::PawnBlack => -1,
-        Piece::KnightWhite => 3,
-        Piece::KnightBlack => -3,
-        Piece::BishopWhite => 3,
-        Piece::BishopBlack => -3,
-        Piece::RookWhite => 5,
-        Piece::RookBlack => -5,
-        Piece::QueenWhite => 9,
-        Piece::QueenBlack => -9,
-        _ => 0,
-    }
-}
-
-/**
- * Minimax with negamax approach
- * Returns the best score from the current position
- * Positive score is good for the side to move
- */
-fn minimax(board: Board, depth: usize) -> i32 {
-    if depth == 0 {
-        return evaluate_position(&board);
-    }
-
-    let moves: Vec<Move> = board.generate_all_legal_moves();
-    Logger::debug(&format!("minimax depth={} moves={}", depth, moves.len()));
-    if moves.is_empty() {
-        // Check for checkmate or stalemate
-        if board.is_in_check(board.side_to_move) {
-            return -9000; // Checkmate is very bad
-        } else {
-            return 0; // Stalemate is neutral
-        }
-    }
-
-    let mut best_score: i32 = i32::MIN;
-    for mv in moves {
-        let mut board_copy: Board = board.clone();
-        board_copy.make_move(mv);
-        let score: i32 = -minimax(board_copy, depth - 1);
-        best_score = best_score.max(score);
-    }
-
-    best_score
-}
-
-/**
- * Find the best move using Minimax algorithm
- */
-fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
-    Logger::debug("find_best_move: starting");
-    let moves = board.generate_all_legal_moves();
-    Logger::debug(&format!("find_best_move: found {} legal moves", moves.len()));
-
-    if moves.is_empty() {
-        Logger::debug("find_best_move: no legal moves found");
-        return None;
-    }
-
-    let mut best_move: Move = moves[0];
-    let mut best_score: i32 = i32::MIN;
-
-    for mv in moves {
-        let mut board_copy: Board = board.clone();
-        board_copy.make_move(mv);
-        let score = -minimax(board_copy, depth - 1);
-
-        if score > best_score {
-            best_score = score;
-            best_move = mv;
-        }
-    }
-
-    Some(best_move)
 }
 
 fn parse_perft_depth(cmd: &str) -> Result<usize, String> {
@@ -413,7 +319,7 @@ pub fn run_uci() {
                 }
                 // Use Minimax to find the best move (depth 3)
                 Logger::info("Processing GO command");
-                match find_best_move(&board, 3) {
+                match search::find_best_move(&board, 3) {
                     Some(best) => {
                         let best_uci: String = move_to_uci(&best);
                         Logger::info(&format!("Found best move: {}", best_uci));
