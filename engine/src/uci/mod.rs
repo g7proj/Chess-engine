@@ -240,21 +240,43 @@ pub fn handle_divide(cmd: &str, board: &Board) -> Result<Vec<(String, u64)>, Str
 }
 
 fn print_perft_result(nodes: u64, depth: usize, prefix: &str, elapsed_ms: Option<u128>) {
-    println!("{}perft depth {} nodes {}", prefix, depth, nodes);
+    let nps: Option<u64> = elapsed_ms.map(|ms| {
+        if ms == 0 {
+            nodes
+        } else {
+            ((nodes as u128 * 1000) / ms) as u64
+        }
+    });
+
+    println!("{}info depth {} nodes {}", prefix, depth, nodes);
+    if let Some(nps) = nps {
+        println!("{}info nps {}", prefix, nps);
+    }
     if let Some(ms) = elapsed_ms {
-        println!("{}time {} ms", prefix, ms);
+        println!("{}info time {}", prefix, ms);
     }
 }
 
 fn print_divide_result(entries: &[(String, u64)], depth: usize, prefix: &str, elapsed_ms: Option<u128>) {
     let total: u64 = entries.iter().map(|(_, nodes)| *nodes).sum();
-    println!("{}divide depth {}", prefix, depth);
+    let nps: Option<u64> = elapsed_ms.map(|ms| {
+        if ms == 0 {
+            total
+        } else {
+            ((total as u128 * 1000) / ms) as u64
+        }
+    });
+
+    println!("{}info depth {} nodes {}", prefix, depth, total);
     for (mv, nodes) in entries {
-        println!("{}  {} {}", prefix, mv, nodes);
+        println!("{}info depth {} nodes {} pv {}", prefix, depth, nodes, mv);
     }
-    println!("{}total {}", prefix, total);
+    println!("{}info string divide total {}", prefix, total);
+    if let Some(nps) = nps {
+        println!("{}info nps {}", prefix, nps);
+    }
     if let Some(ms) = elapsed_ms {
-        println!("{}time {} ms", prefix, ms);
+        println!("{}info time {}", prefix, ms);
     }
 }
 
@@ -373,7 +395,7 @@ pub fn run_uci() {
                     match handle_perft(cmd, &board) {
                         Ok(nodes) => {
                             let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
-                            print_perft_result(nodes, depth, "info string ", None);
+                            print_perft_result(nodes, depth, "", None);
                         }
                         Err(e) => println!("info string Error handling perft command: {}", e),
                     }
@@ -383,7 +405,7 @@ pub fn run_uci() {
                     match handle_divide(cmd, &board) {
                         Ok(entries) => {
                             let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
-                            print_divide_result(&entries, depth, "info string ", None);
+                            print_divide_result(&entries, depth, "", None);
                         }
                         Err(e) => println!("info string Error handling divide command: {}", e),
                     }
@@ -416,7 +438,7 @@ pub fn run_uci() {
                 match handle_perft(cmd, &board) {
                     Ok(nodes) => {
                         let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
-                        print_perft_result(nodes, depth, "info string ", None);
+                        print_perft_result(nodes, depth, "", None);
                     }
                     Err(e) => println!("info string Error handling perft command: {}", e),
                 }
@@ -425,7 +447,7 @@ pub fn run_uci() {
                 match handle_divide(cmd, &board) {
                     Ok(entries) => {
                         let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
-                        print_divide_result(&entries, depth, "info string ", None);
+                        print_divide_result(&entries, depth, "", None);
                     }
                     Err(e) => println!("info string Error handling divide command: {}", e),
                 }
@@ -665,5 +687,11 @@ mod tests {
         let entries: Vec<(String, u64)> = handle_divide("go divide 1", &board).unwrap();
         assert_eq!(entries.len(), 20);
         assert_eq!(entries.iter().map(|(_, nodes)| *nodes).sum::<u64>(), 20);
+    }
+
+    #[test]
+    fn test_print_divide_result_format() {
+        let entries: Vec<(String, u64)> = vec![("e2e4".to_string(), 20), ("d2d4".to_string(), 20)];
+        print_divide_result(&entries, 1, "", Some(0));
     }
 }

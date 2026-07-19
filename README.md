@@ -140,6 +140,7 @@ divide 3
 ```
 
 `divide` output is indented for readability, with one line per root move and a total summary.
+UCI mode now prints standard `info depth ... nodes ... nps ... pv ...` lines for `perft` and `divide`.
 
 ## Tests
 
