@@ -157,6 +157,7 @@ The test suite covers:
 - FEN parsing and generation
 - legal move generation
 - basic UCI parsing
+- canonical perft regression positions up to depth 4
 
 There is also an ignored benchmark test:
 
