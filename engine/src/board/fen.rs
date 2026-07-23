@@ -1,4 +1,4 @@
-use super::{Board, Piece, Color};
+use super::{Board, Color, Piece};
 
 impl Board {
     /// Generate a FEN position string (piece placement only)
@@ -176,7 +176,10 @@ mod tests {
     fn test_fen_startpos() {
         let board = Board::new();
         let fen = board.to_fen();
-        assert_eq!(fen, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        assert_eq!(
+            fen,
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        );
     }
 
     #[test]

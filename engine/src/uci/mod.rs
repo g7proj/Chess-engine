@@ -1,17 +1,15 @@
+use crate::board::Board;
+use crate::logger::Logger;
+use crate::moves::{Move, Promotion};
+use crate::search;
 use std::collections::HashMap;
 use std::io::{self, BufRead};
 use std::time::Instant;
-use crate::board::Board;
-use crate::moves::{Move, Promotion};
-use crate::logger::{Logger};
-use crate::search;
 
-/**
- * Parse a square in algebraic notation (e.g. "e4") into (rank, file) indices
- */
+/// Parses an algebraic square into zero-based `(rank, file)` indices.
 fn parse_square(sq: &str) -> Option<(usize, usize)> {
     let bytes: &[u8] = sq.as_bytes();
-    
+
     // Check length (must be 2)
     if bytes.len() != 2 {
         return None;
@@ -25,18 +23,16 @@ fn parse_square(sq: &str) -> Option<(usize, usize)> {
     if !('a'..='h').contains(&file) || !('1'..='8').contains(&rank) {
         return None;
     }
-    
+
     let f: usize = (file as u8 - b'a') as usize;
     let r: usize = (rank as u8 - b'1') as usize;
     Some((r, f))
 }
 
-/**
- * Parse a move in UCI format (e.g. "e2e4", "e7e8q") into a Move struct
- */
+/// Parses a UCI move, including an optional promotion piece.
 fn parse_move_str(mv_str: &str) -> Option<Move> {
     let bytes: &[u8] = mv_str.as_bytes();
-    
+
     // Check length (must be 4 or 5)
     if bytes.len() < 4 || bytes.len() > 5 {
         return None;
@@ -71,10 +67,7 @@ fn parse_move_str(mv_str: &str) -> Option<Move> {
     })
 }
 
-/**
- * Convert a Move struct into UCI format string
- * Example: Move { from_rank: 1, from_file: 4, to_rank: 3, to_file: 4, promotion: None } -> "e2e4"
- */
+/// Converts a move into its UCI string representation.
 fn move_to_uci(mv: &Move) -> String {
     let from_file: char = (b'a' + mv.from_file as u8) as char;
     let from_rank: char = (b'1' + mv.from_rank as u8) as char;
@@ -94,6 +87,7 @@ fn move_to_uci(mv: &Move) -> String {
     uci_str
 }
 
+/// Extracts and validates the depth from a perft or divide command.
 fn parse_perft_depth(cmd: &str) -> Result<usize, String> {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     if parts.is_empty() {
@@ -119,11 +113,13 @@ fn parse_perft_depth(cmd: &str) -> Result<usize, String> {
     Ok(depth)
 }
 
+/// Runs a perft command against the supplied position.
 pub fn handle_perft(cmd: &str, board: &Board) -> Result<u64, String> {
     let depth: usize = parse_perft_depth(cmd)?;
     Ok(board.perft(depth))
 }
 
+/// Counts perft nodes for each legal root move.
 fn divide_root_moves(board: &Board, depth: usize) -> Vec<(String, u64)> {
     let mut entries: Vec<(String, u64)> = Vec::new();
 
@@ -137,6 +133,7 @@ fn divide_root_moves(board: &Board, depth: usize) -> Vec<(String, u64)> {
     entries
 }
 
+/// Runs a divide command against the supplied position.
 pub fn handle_divide(cmd: &str, board: &Board) -> Result<Vec<(String, u64)>, String> {
     let depth: usize = parse_perft_depth(cmd)?;
     if depth == 0 {
@@ -145,6 +142,7 @@ pub fn handle_divide(cmd: &str, board: &Board) -> Result<Vec<(String, u64)>, Str
     Ok(divide_root_moves(board, depth))
 }
 
+/// Prints a perft result using UCI-compatible info lines.
 fn print_perft_result(nodes: u64, depth: usize, prefix: &str, elapsed_ms: Option<u128>) {
     let nps: Option<u64> = elapsed_ms.map(|ms| {
         if ms == 0 {
@@ -163,7 +161,13 @@ fn print_perft_result(nodes: u64, depth: usize, prefix: &str, elapsed_ms: Option
     }
 }
 
-fn print_divide_result(entries: &[(String, u64)], depth: usize, prefix: &str, elapsed_ms: Option<u128>) {
+/// Prints root-move counts and totals for a divide result.
+fn print_divide_result(
+    entries: &[(String, u64)],
+    depth: usize,
+    prefix: &str,
+    elapsed_ms: Option<u128>,
+) {
     let total: u64 = entries.iter().map(|(_, nodes)| *nodes).sum();
     let nps: Option<u64> = elapsed_ms.map(|ms| {
         if ms == 0 {
@@ -186,6 +190,7 @@ fn print_divide_result(entries: &[(String, u64)], depth: usize, prefix: &str, el
     }
 }
 
+/// Runs the standalone perft or divide command-line mode.
 pub fn run_cli(args: &[String]) -> Result<(), String> {
     let mut mode: Option<&str> = None;
     let mut depth: Option<usize> = None;
@@ -197,18 +202,34 @@ pub fn run_cli(args: &[String]) -> Result<(), String> {
             "--perft" => {
                 mode = Some("perft");
                 i += 1;
-                let depth_str = args.get(i).ok_or_else(|| "missing depth after --perft".to_string())?;
-                depth = Some(depth_str.parse().map_err(|_| format!("invalid depth: {}", depth_str))?);
+                let depth_str = args
+                    .get(i)
+                    .ok_or_else(|| "missing depth after --perft".to_string())?;
+                depth = Some(
+                    depth_str
+                        .parse()
+                        .map_err(|_| format!("invalid depth: {}", depth_str))?,
+                );
             }
             "--divide" => {
                 mode = Some("divide");
                 i += 1;
-                let depth_str = args.get(i).ok_or_else(|| "missing depth after --divide".to_string())?;
-                depth = Some(depth_str.parse().map_err(|_| format!("invalid depth: {}", depth_str))?);
+                let depth_str = args
+                    .get(i)
+                    .ok_or_else(|| "missing depth after --divide".to_string())?;
+                depth = Some(
+                    depth_str
+                        .parse()
+                        .map_err(|_| format!("invalid depth: {}", depth_str))?,
+                );
             }
             "--fen" => {
                 i += 1;
-                fen = Some(args.get(i).ok_or_else(|| "missing FEN after --fen".to_string())?.clone());
+                fen = Some(
+                    args.get(i)
+                        .ok_or_else(|| "missing FEN after --fen".to_string())?
+                        .clone(),
+                );
             }
             "--startpos" => {
                 fen = None;
@@ -252,7 +273,7 @@ pub fn run_cli(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-
+/// Runs the UCI command loop.
 pub fn run_uci() {
     // Initialize logger with desired log level and file path
     Logger::init(crate::logger::LogLevel::Info, "engine_debug.log");
@@ -317,7 +338,7 @@ pub fn run_uci() {
                     }
                     continue;
                 }
-                // Use Minimax to find the best move (depth 3)
+                // Use ordered alpha-beta search at a fixed depth.
                 Logger::info("Processing GO command");
                 match search::find_best_move(&board, 3) {
                     Some(best) => {
@@ -340,24 +361,20 @@ pub fn run_uci() {
             cmd if cmd.starts_with("setoption") => {
                 handle_setoption(cmd, &mut options);
             }
-            cmd if cmd.starts_with("perft") => {
-                match handle_perft(cmd, &board) {
-                    Ok(nodes) => {
-                        let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
-                        print_perft_result(nodes, depth, "", None);
-                    }
-                    Err(e) => println!("info string Error handling perft command: {}", e),
+            cmd if cmd.starts_with("perft") => match handle_perft(cmd, &board) {
+                Ok(nodes) => {
+                    let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
+                    print_perft_result(nodes, depth, "", None);
                 }
-            }
-            cmd if cmd.starts_with("divide") => {
-                match handle_divide(cmd, &board) {
-                    Ok(entries) => {
-                        let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
-                        print_divide_result(&entries, depth, "", None);
-                    }
-                    Err(e) => println!("info string Error handling divide command: {}", e),
+                Err(e) => println!("info string Error handling perft command: {}", e),
+            },
+            cmd if cmd.starts_with("divide") => match handle_divide(cmd, &board) {
+                Ok(entries) => {
+                    let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
+                    print_divide_result(&entries, depth, "", None);
                 }
-            }
+                Err(e) => println!("info string Error handling divide command: {}", e),
+            },
             other => {
                 Logger::info(&format!("Unknown command: {}", other));
                 println!("Unknown command: {}", other);
@@ -367,9 +384,7 @@ pub fn run_uci() {
     Logger::info("=== Engine shutdown ===");
 }
 
-/**
- * Handle ucinewgame command to reset the board and options
- */
+/// Resets the board and engine options for a new game.
 pub fn handle_ucinewgame(board: &mut Board, options: &mut HashMap<String, String>) {
     *board = Board::new();
     board.record_position();
@@ -377,14 +392,15 @@ pub fn handle_ucinewgame(board: &mut Board, options: &mut HashMap<String, String
     // Reset any other state as needed
 }
 
-/**
- * Simple setoption parser
- */
+/// Parses and stores a UCI `setoption` command.
 pub fn handle_setoption(cmd: &str, options: &mut HashMap<String, String>) {
     // Example: setoption name Hash value 128
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     if let Some(name_idx) = parts.iter().position(|p| *p == "name") {
-        let value_idx: usize = parts.iter().position(|p| *p == "value").unwrap_or(parts.len());
+        let value_idx: usize = parts
+            .iter()
+            .position(|p| *p == "value")
+            .unwrap_or(parts.len());
         if name_idx + 1 <= value_idx {
             let name: String = parts[name_idx + 1..value_idx].join(" ");
             let value: String = if value_idx < parts.len() {
@@ -397,6 +413,7 @@ pub fn handle_setoption(cmd: &str, options: &mut HashMap<String, String>) {
     }
 }
 
+/// Prints all legal moves in UCI notation.
 pub fn handle_listmoves(board: &Board) {
     // Print all legal moves in UCI format on one line prefixed by "legalmoves"
     let moves: Vec<Move> = board.generate_all_legal_moves();
@@ -411,20 +428,17 @@ pub fn handle_listmoves(board: &Board) {
     }
 }
 
+/// Handles a UCI stop command.
 pub fn handle_stop() {
     // Placeholder for stopping search
 }
 
+/// Handles a UCI ponderhit command.
 pub fn handle_ponderhit() {
     // Placeholder for handling ponderhit
 }
 
-/**
- * Handle the "position" UCI command to set up the board position
- * Examples:
- * position startpos moves e2e4 e7e5
- * position fen <fenstring> moves e2e4 e7e5
- */
+/// Sets the board from a UCI `position` command and applies legal moves.
 pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     if parts.len() < 2 {
@@ -437,7 +451,8 @@ pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
 
         if let Some(pos) = parts.iter().position(|&p| p == "moves") {
             for mv_str in &parts[pos + 1..] {
-                let mv = parse_move_str(mv_str).ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
+                let mv = parse_move_str(mv_str)
+                    .ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
                 if board.generate_all_legal_moves().contains(&mv) {
                     board.make_move(mv);
                 } else {
@@ -447,7 +462,10 @@ pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
         }
         Ok(())
     } else if parts[1] == "fen" {
-        let move_pos = parts.iter().position(|&p| p == "moves").unwrap_or(parts.len());
+        let move_pos = parts
+            .iter()
+            .position(|&p| p == "moves")
+            .unwrap_or(parts.len());
         let fen_parts = &parts[2..move_pos];
         if fen_parts.is_empty() {
             return Err("Missing FEN string".to_string());
@@ -460,7 +478,8 @@ pub fn handle_position(cmd: &str, board: &mut Board) -> Result<(), String> {
 
                 if move_pos < parts.len() {
                     for mv_str in &parts[move_pos + 1..] {
-                        let mv = parse_move_str(mv_str).ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
+                        let mv = parse_move_str(mv_str)
+                            .ok_or_else(|| format!("Invalid move format: {}", mv_str))?;
                         if board.generate_all_legal_moves().contains(&mv) {
                             board.make_move(mv);
                         } else {
@@ -558,8 +577,12 @@ mod tests {
         }
         expected_uci_moves.sort();
 
-        // Non si tenta più di sostituire stdout.lock(); si verifica direttamente la lista di mosse UCI
-        let mut actual_uci_moves: Vec<String> = board.generate_all_legal_moves().iter().map(|m| move_to_uci(m)).collect();
+        // Compare the generated UCI move lists without redirecting stdout.
+        let mut actual_uci_moves: Vec<String> = board
+            .generate_all_legal_moves()
+            .iter()
+            .map(|m| move_to_uci(m))
+            .collect();
         actual_uci_moves.sort();
 
         assert_eq!(expected_uci_moves, actual_uci_moves);

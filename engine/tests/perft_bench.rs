@@ -13,7 +13,10 @@ fn run_benchmark_case(name: &str, board: &Board, depth: usize, expected: u64) {
     };
 
     assert_eq!(nodes, expected, "unexpected node count for {}", name);
-    println!("{}: {} nodes in {} ms ({} nps)", name, nodes, elapsed_ms, nps);
+    println!(
+        "{}: {} nodes in {} ms ({} nps)",
+        name, nodes, elapsed_ms, nps
+    );
 }
 
 #[test]

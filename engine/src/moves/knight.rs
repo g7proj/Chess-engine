@@ -14,10 +14,14 @@ impl Board {
 
         // generate the moves (offsets from the current position)
         let knight_offsets: &[(isize, isize)] = &[
-            (2, 1), (2, -1),
-            (-2, 1), (-2, -1),
-            (1, 2), (1, -2),
-            (-1, 2), (-1, -2),
+            (2, 1),
+            (2, -1),
+            (-2, 1),
+            (-2, -1),
+            (1, 2),
+            (1, -2),
+            (-1, 2),
+            (-1, -2),
         ];
 
         for (dr, df) in knight_offsets {

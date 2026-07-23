@@ -3,7 +3,13 @@ use engine::board::Board;
 fn assert_perft_counts(fen: &str, expected: &[(usize, u64)]) {
     let board: Board = Board::from_fen(fen).expect("valid perft FEN");
     for (depth, nodes) in expected {
-        assert_eq!(board.perft(*depth), *nodes, "unexpected perft at depth {} for {}", depth, fen);
+        assert_eq!(
+            board.perft(*depth),
+            *nodes,
+            "unexpected perft at depth {} for {}",
+            depth,
+            fen
+        );
     }
 }
 

@@ -1,10 +1,13 @@
-use crate::{board::{Board, Color, Piece}, constants::{FILES, RANKS}};
-pub mod knight;
+use crate::{
+    board::{Board, Color, Piece},
+    constants::{FILES, RANKS},
+};
+pub mod apply;
+pub mod attacks;
 pub mod king;
+pub mod knight;
 pub mod pawn;
 pub mod sliding;
-pub mod attacks;
-pub mod apply;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Promotion {
@@ -67,16 +70,14 @@ impl Board {
         nodes
     }
 
-    /**
-     * Generate all legal moves for the side to move
-     */
+    /// Generates all legal moves for the side to move.
     pub fn generate_all_legal_moves(&self) -> Vec<Move> {
         use Piece::*;
         let mut all_moves: Vec<Move> = Vec::new();
 
         // Iterate through all squares
         for r in 0..RANKS {
-            for f in 0..FILES { 
+            for f in 0..FILES {
                 let piece: Piece = self.squares[r][f];
                 if piece != Empty {
                     let piece_color: Color = self.piece_color(piece).unwrap();
@@ -98,7 +99,10 @@ impl Board {
         }
 
         // Now filter out illegal moves
-        all_moves.into_iter().filter(|mv: &Move| self.is_legal_move(*mv)).collect()
+        all_moves
+            .into_iter()
+            .filter(|mv: &Move| self.is_legal_move(*mv))
+            .collect()
     }
 
     fn is_legal_move(&self, mv: Move) -> bool {
@@ -113,7 +117,10 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{board::{Board, Color, Piece}, constants::{FILES, RANKS}};
+    use crate::{
+        board::{Board, Color, Piece},
+        constants::{FILES, RANKS},
+    };
 
     #[test]
     fn test_generate_all_legal_moves_starting_position() {
@@ -187,7 +194,7 @@ mod tests {
         board.squares[1][4] = Piece::RookWhite;
         board.squares[7][4] = Piece::RookBlack;
         board.side_to_move = Color::White;
-        
+
         // Moving the rook on the side would expose the king to check
         let illegal_move: Move = Move::new(1, 4, 1, 5);
         assert!(!board.is_legal_move(illegal_move));

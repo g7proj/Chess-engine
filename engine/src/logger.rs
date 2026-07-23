@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
-use std::sync::Mutex;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
@@ -24,12 +24,14 @@ impl Logger {
         *LOG_FILE_PATH.lock().unwrap() = log_path.to_string(); // Set the log file path
 
         // Clear the log file at initialization
-        let _ = OpenOptions::new().create(true).write(true).truncate(true).open(log_path);
+        let _ = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(log_path);
     }
 
-    /**
-     * Write a debug message to engine_debug.log
-     */
+    /// Writes a message to the configured log file when the level is enabled.
     fn log(log_level: LogLevel, msg: &str) {
         let current: std::sync::MutexGuard<'_, LogLevel> = CURRENT_LOG_LEVEL.lock().unwrap();
         if (log_level as u8) < (*current as u8) {
@@ -44,9 +46,7 @@ impl Logger {
         }
     }
 
-    /**
-     * Convenience functions for different log levels
-     */
+    /// Provides convenience methods for each log level.
     pub fn debug(msg: &str) {
         Self::log(LogLevel::Debug, msg);
     }

@@ -1,4 +1,4 @@
-use super::{Board, Piece, Color};
+use super::{Board, Color, Piece};
 
 impl Board {
     pub fn piece_color(&self, piece: Piece) -> Option<Color> {
@@ -39,8 +39,8 @@ impl Board {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::in_bounds;
     use super::*;
+    use crate::constants::in_bounds;
     #[test]
     fn test_piece_helpers() {
         let board: Board = Board::new();

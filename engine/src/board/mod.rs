@@ -1,14 +1,14 @@
+use crate::constants::{FILES, RANKS};
 use std::collections::HashMap;
-use crate::constants::{RANKS, FILES};
 
-pub mod piece;
 pub mod color;
 pub mod fen;
-pub mod position;
 pub mod helpers;
+pub mod piece;
+pub mod position;
 
-pub use piece::Piece;
 pub use color::Color;
+pub use piece::Piece;
 
 #[derive(Debug, Clone)]
 pub struct Board {
@@ -28,14 +28,32 @@ impl Board {
     pub fn new() -> Self {
         use Piece::*;
         let squares: [[Piece; FILES]; RANKS] = [
-            [RookWhite, KnightWhite, BishopWhite, QueenWhite, KingWhite, BishopWhite, KnightWhite, RookWhite],
+            [
+                RookWhite,
+                KnightWhite,
+                BishopWhite,
+                QueenWhite,
+                KingWhite,
+                BishopWhite,
+                KnightWhite,
+                RookWhite,
+            ],
             [PawnWhite; FILES],
             [Empty; FILES],
             [Empty; FILES],
             [Empty; FILES],
             [Empty; FILES],
             [PawnBlack; FILES],
-            [RookBlack, KnightBlack, BishopBlack, QueenBlack, KingBlack, BishopBlack, KnightBlack, RookBlack],
+            [
+                RookBlack,
+                KnightBlack,
+                BishopBlack,
+                QueenBlack,
+                KingBlack,
+                BishopBlack,
+                KnightBlack,
+                RookBlack,
+            ],
         ];
         Board {
             squares,
@@ -51,7 +69,6 @@ impl Board {
         }
     }
 }
-
 
 #[cfg(test)]
 mod test {

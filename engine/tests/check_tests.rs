@@ -1,4 +1,4 @@
-use engine::board::{Board, Piece, Color};
+use engine::board::{Board, Color, Piece};
 
 #[test]
 fn test_check() {
@@ -14,7 +14,7 @@ fn test_check() {
     board.squares[7][4] = Piece::RookBlack;
     board.side_to_move = Color::White;
     assert!(board.is_in_check(Color::White));
-    
+
     board.squares[7][4] = Piece::Empty;
     board.squares[7][5] = Piece::RookBlack;
     assert!(!board.is_in_check(Color::White));
@@ -34,7 +34,7 @@ fn test_checkmate() {
     board.squares[7][4] = Piece::RookBlack;
     // This is check, not checkmate
     assert!(!board.is_checkmate());
-    
+
     board.squares[7][3] = Piece::RookBlack;
     board.squares[7][5] = Piece::QueenBlack;
     // now this is checkmate

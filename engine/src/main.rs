@@ -1,9 +1,12 @@
 use engine::uci;
 use std::env;
 
+/// Selects CLI mode or starts the UCI protocol loop.
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let has_cli_mode: bool = args.iter().any(|arg| arg == "--perft" || arg == "--divide" || arg == "--help" || arg == "-h");
+    let has_cli_mode: bool = args
+        .iter()
+        .any(|arg| arg == "--perft" || arg == "--divide" || arg == "--help" || arg == "-h");
 
     if has_cli_mode {
         if let Err(e) = uci::run_cli(&args) {

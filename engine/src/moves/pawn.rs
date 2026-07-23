@@ -7,7 +7,7 @@ impl Board {
         use Piece::*;
         let mut moves = Vec::new();
         let piece = self.squares[rank][file];
-        
+
         let (forward, start_rank, promotion_rank) = match piece {
             PawnWhite => (1, 1, 7),
             PawnBlack => (-1, 6, 0),
@@ -16,7 +16,7 @@ impl Board {
 
         let r = rank as isize;
         let f = file as isize;
-    
+
         // 1. Single move (one step forward)
         let (one_step_r, one_step_f) = (r + forward, f);
         if in_bounds(one_step_r, one_step_f) {
@@ -24,11 +24,16 @@ impl Board {
             if self.squares[nr as usize][nf as usize] == Empty {
                 // promotion?
                 if nr as usize == promotion_rank {
-                    moves.extend(self.generate_pawn_promotions(rank, file, nr as usize, nf as usize));
+                    moves.extend(self.generate_pawn_promotions(
+                        rank,
+                        file,
+                        nr as usize,
+                        nf as usize,
+                    ));
                 } else {
                     moves.push(Move::new(rank, file, nr as usize, nf as usize));
                 }
-    
+
                 // 2. Double move (only if the single move is free)
                 if rank == start_rank {
                     let (two_step_r, two_step_f) = (r + forward * 2, f);
@@ -41,24 +46,29 @@ impl Board {
                 }
             }
         }
-    
+
         // 3. Diagonal captures
         for df in [-1, 1] {
             let (diag_r, diag_f) = (r + forward, f + df);
             if in_bounds(diag_r, diag_f) {
                 let (nr, nf) = (diag_r, diag_f);
                 let target = self.squares[nr as usize][nf as usize];
-    
+
                 if target != Empty && !self.same_color(piece, target) {
                     if nr as usize == promotion_rank {
-                        moves.extend(self.generate_pawn_promotions(rank, file, nr as usize, nf as usize));
+                        moves.extend(self.generate_pawn_promotions(
+                            rank,
+                            file,
+                            nr as usize,
+                            nf as usize,
+                        ));
                     } else {
                         moves.push(Move::new(rank, file, nr as usize, nf as usize));
                     }
                 }
             }
         }
-    
+
         // 4. En passant
         if let Some((ep_r, ep_f)) = self.en_passant {
             for df in [-1, 1] {
@@ -71,17 +81,11 @@ impl Board {
                 }
             }
         }
-    
+
         moves
     }
 
-    fn generate_pawn_promotions(
-        &self,
-        fr: usize,
-        ff: usize,
-        tr: usize,
-        tf: usize
-    ) -> Vec<Move> {
+    fn generate_pawn_promotions(&self, fr: usize, ff: usize, tr: usize, tf: usize) -> Vec<Move> {
         use crate::moves::Promotion::*;
 
         vec![
@@ -126,7 +130,7 @@ mod tests {
         // Check the en passant move
         assert!(moves.iter().any(|m| m.to_rank == 5 && m.to_file == 3));
     }
-    
+
     #[test]
     fn test_pawn_promotion_with_capture() {
         let mut board: Board = Board::new();
@@ -139,6 +143,14 @@ mod tests {
         board.squares[7][1] = Piece::RookBlack;
         let moves: Vec<Move> = board.generate_pawn_moves(6, 0);
         // There must be a promotion in (7,1)
-        assert!(moves.iter().any(|m| m.to_rank == 7 && m.to_file == 1 && matches!(m.promotion, crate::moves::Promotion::Queen | crate::moves::Promotion::Rook | crate::moves::Promotion::Bishop | crate::moves::Promotion::Knight)));
+        assert!(moves.iter().any(|m| m.to_rank == 7
+            && m.to_file == 1
+            && matches!(
+                m.promotion,
+                crate::moves::Promotion::Queen
+                    | crate::moves::Promotion::Rook
+                    | crate::moves::Promotion::Bishop
+                    | crate::moves::Promotion::Knight
+            )));
     }
 }

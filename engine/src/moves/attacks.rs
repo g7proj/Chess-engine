@@ -1,11 +1,18 @@
-use crate::{board::{Board, Color, Piece}, moves::Move};
+use crate::{
+    board::{Board, Color, Piece},
+    moves::Move,
+};
 
 impl Board {
     pub fn is_in_check(&self, color: Color) -> bool {
         use Piece::*;
 
         // find king position
-        let king_piece: Piece = if color == Color::White { KingWhite } else { KingBlack };
+        let king_piece: Piece = if color == Color::White {
+            KingWhite
+        } else {
+            KingBlack
+        };
         let mut king_rank = 0;
         let mut king_file = 0;
         let mut king_found = false;
@@ -19,19 +26,21 @@ impl Board {
                     break;
                 }
             }
-            if king_found { break; }
+            if king_found {
+                break;
+            }
         }
 
-        if !king_found { return false; }
+        if !king_found {
+            return false;
+        }
 
         // Check if some opponent piece can attak the king
         let opponent_color: Color = color.opposite();
         self.is_square_under_attack(king_rank, king_file, opponent_color)
     }
 
-    /**
-     * Return true if the side to move is in check and have no legal move
-     */
+    /// Returns true when the side to move is in check with no legal move.
     pub fn is_checkmate(&self) -> bool {
         // Check if the side_to_move is under check and cannot move
         self.is_in_check(self.side_to_move) && self.generate_all_legal_moves().is_empty()
@@ -80,15 +89,46 @@ impl Board {
 
         match piece {
             PawnWhite => from_rank + 1 == target_rank && from_file.abs_diff(target_file) == 1,
-            PawnBlack => from_rank >= 1 && from_rank - 1 == target_rank && from_file.abs_diff(target_file) == 1,
+            PawnBlack => {
+                from_rank >= 1
+                    && from_rank - 1 == target_rank
+                    && from_file.abs_diff(target_file) == 1
+            }
             KnightWhite | KnightBlack => {
                 let dr = from_rank.abs_diff(target_rank);
                 let df = from_file.abs_diff(target_file);
                 (dr == 2 && df == 1) || (dr == 1 && df == 2)
             }
-            BishopWhite | BishopBlack => self.attacks_along_ray(from_rank, from_file, target_rank, target_file, &[(1, 1), (1, -1), (-1, 1), (-1, -1)]),
-            RookWhite | RookBlack => self.attacks_along_ray(from_rank, from_file, target_rank, target_file, &[(1, 0), (-1, 0), (0, 1), (0, -1)]),
-            QueenWhite | QueenBlack => self.attacks_along_ray(from_rank, from_file, target_rank, target_file, &[(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)]),
+            BishopWhite | BishopBlack => self.attacks_along_ray(
+                from_rank,
+                from_file,
+                target_rank,
+                target_file,
+                &[(1, 1), (1, -1), (-1, 1), (-1, -1)],
+            ),
+            RookWhite | RookBlack => self.attacks_along_ray(
+                from_rank,
+                from_file,
+                target_rank,
+                target_file,
+                &[(1, 0), (-1, 0), (0, 1), (0, -1)],
+            ),
+            QueenWhite | QueenBlack => self.attacks_along_ray(
+                from_rank,
+                from_file,
+                target_rank,
+                target_file,
+                &[
+                    (1, 0),
+                    (-1, 0),
+                    (0, 1),
+                    (0, -1),
+                    (1, 1),
+                    (1, -1),
+                    (-1, 1),
+                    (-1, -1),
+                ],
+            ),
             KingWhite | KingBlack => {
                 let dr = from_rank.abs_diff(target_rank);
                 let df = from_file.abs_diff(target_file);
@@ -133,7 +173,11 @@ mod tests {
     fn test_square_attacked_by_knight() {
         let mut b = Board::new();
         // Clear
-        for r in 0..8 { for f in 0..8 { b.squares[r][f] = Piece::Empty; } }
+        for r in 0..8 {
+            for f in 0..8 {
+                b.squares[r][f] = Piece::Empty;
+            }
+        }
         b.squares[4][4] = Piece::KingWhite;
         b.squares[2][3] = Piece::KnightBlack;
         assert!(b.is_in_check(crate::board::Color::White));
@@ -142,7 +186,11 @@ mod tests {
     #[test]
     fn test_square_attacked_by_pawn() {
         let mut b = Board::new();
-        for r in 0..8 { for f in 0..8 { b.squares[r][f] = Piece::Empty; } }
+        for r in 0..8 {
+            for f in 0..8 {
+                b.squares[r][f] = Piece::Empty;
+            }
+        }
         b.squares[4][4] = Piece::KingWhite;
         // black pawn attacking from (5,3)
         b.squares[5][3] = Piece::PawnBlack;
@@ -152,7 +200,11 @@ mod tests {
     #[test]
     fn test_square_attacked_by_rook() {
         let mut b = Board::new();
-        for r in 0..8 { for f in 0..8 { b.squares[r][f] = Piece::Empty; } }
+        for r in 0..8 {
+            for f in 0..8 {
+                b.squares[r][f] = Piece::Empty;
+            }
+        }
         b.squares[4][4] = Piece::KingWhite;
         b.squares[4][7] = Piece::RookBlack;
         assert!(b.is_in_check(crate::board::Color::White));
@@ -161,7 +213,11 @@ mod tests {
     #[test]
     fn test_square_attacked_by_bishop_and_queen() {
         let mut b = Board::new();
-        for r in 0..8 { for f in 0..8 { b.squares[r][f] = Piece::Empty; } }
+        for r in 0..8 {
+            for f in 0..8 {
+                b.squares[r][f] = Piece::Empty;
+            }
+        }
         b.squares[4][4] = Piece::KingWhite;
         b.squares[1][1] = Piece::BishopBlack;
         b.squares[2][6] = Piece::QueenBlack;
@@ -171,7 +227,11 @@ mod tests {
     #[test]
     fn test_square_not_attacked() {
         let mut b = Board::new();
-        for r in 0..8 { for f in 0..8 { b.squares[r][f] = Piece::Empty; } }
+        for r in 0..8 {
+            for f in 0..8 {
+                b.squares[r][f] = Piece::Empty;
+            }
+        }
         b.squares[4][4] = Piece::KingWhite;
         assert!(!b.is_in_check(crate::board::Color::White));
     }

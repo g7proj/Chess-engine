@@ -5,6 +5,7 @@ use crate::moves::{Move, Promotion};
 
 const MATE_SCORE: i32 = 30_000;
 
+/// Returns the signed material value of a piece.
 fn piece_value(piece: Piece) -> i32 {
     match piece {
         Piece::PawnWhite => 100,
@@ -21,6 +22,8 @@ fn piece_value(piece: Piece) -> i32 {
     }
 }
 
+/// Returns a material score in centipawns from the side-to-move perspective.
+/// Positive values favor the side to move; negative values favor its opponent.
 fn evaluate_position(board: &Board) -> i32 {
     let mut score: i32 = 0;
     for rank in 0..8 {
@@ -35,6 +38,7 @@ fn evaluate_position(board: &Board) -> i32 {
     }
 }
 
+/// Returns the material bonus assigned to a promotion move.
 fn move_promotion_bonus(promotion: Promotion) -> i32 {
     match promotion {
         Promotion::Queen => 900,
@@ -45,6 +49,7 @@ fn move_promotion_bonus(promotion: Promotion) -> i32 {
     }
 }
 
+/// Scores a legal move for alpha-beta move ordering.
 fn move_order_score(board: &Board, mv: &Move) -> i32 {
     let moving_piece: Piece = board.squares[mv.from_rank][mv.from_file];
     let target_piece: Piece = board.squares[mv.to_rank][mv.to_file];
@@ -72,12 +77,22 @@ fn move_order_score(board: &Board, mv: &Move) -> i32 {
     score
 }
 
+/// Returns legal moves sorted by search priority.
 fn ordered_legal_moves(board: &Board) -> Vec<Move> {
     let mut moves: Vec<Move> = board.generate_all_legal_moves();
     moves.sort_by_key(|mv| Reverse(move_order_score(board, mv)));
     moves
 }
 
+/// Searches a position with negamax alpha-beta pruning.
+///
+/// Returns the best score in centipawns from the side-to-move perspective:
+/// positive values favor that side, negative values favor its opponent.
+/// The search evaluates child positions with a sign flip, updates `alpha`,
+/// and skips remaining moves when `alpha >= beta`.
+///
+/// `depth` is the number of plies remaining. `alpha` is the best score already
+/// guaranteed, while `beta` is the opponent's cutoff bound.
 fn negamax_alpha_beta(board: &Board, depth: usize, mut alpha: i32, beta: i32) -> i32 {
     if depth == 0 {
         return evaluate_position(board);
@@ -106,6 +121,9 @@ fn negamax_alpha_beta(board: &Board, depth: usize, mut alpha: i32, beta: i32) ->
     alpha
 }
 
+/// Finds the move with the highest evaluated score for the side to move.
+///
+/// Returns `None` when the position has no legal moves.
 pub fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
     let moves: Vec<Move> = ordered_legal_moves(board);
     if moves.is_empty() {

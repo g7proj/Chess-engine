@@ -1,4 +1,7 @@
-use crate::{board::Piece::*, constants::{FILES, RANKS}};
+use crate::{
+    board::Piece::*,
+    constants::{FILES, RANKS},
+};
 
 use super::Board;
 
@@ -278,7 +281,10 @@ mod tests {
             }
         }
 
-        assert!(b.is_50_move_draw(), "expected 50-move draw after 100 halfmoves");
+        assert!(
+            b.is_50_move_draw(),
+            "expected 50-move draw after 100 halfmoves"
+        );
         assert_eq!(b.halfmove_clock, 100);
     }
 }

@@ -1,11 +1,11 @@
-use crate::board::{Board, Piece, Color};
+use crate::board::{Board, Color, Piece};
 use crate::logger::Logger;
 use crate::moves::Move;
 
 impl Board {
     pub fn make_move(&mut self, mv: Move) {
-        use Piece::*;
         use crate::moves::Promotion;
+        use Piece::*;
 
         let fr: usize = mv.from_rank;
         let ff: usize = mv.from_file;
@@ -22,13 +22,14 @@ impl Board {
         // ---------------------
         // 0. Castling
         // ---------------------
-        let is_castling: bool = self.is_king(moving_piece) &&
-                            (
-                                (fr == 0 && ff == 4 && tr == 0 && tf == 6) || // White kingside
+        let is_castling: bool = self.is_king(moving_piece)
+            && (
+                (fr == 0 && ff == 4 && tr == 0 && tf == 6) || // White kingside
                                 (fr == 0 && ff == 4 && tr == 0 && tf == 2) || // White queenside
                                 (fr == 7 && ff == 4 && tr == 7 && tf == 6) || // Black kingside
-                                (fr == 7 && ff == 4 && tr == 7 && tf == 2)    // Black queenside
-                            );
+                                (fr == 7 && ff == 4 && tr == 7 && tf == 2)
+                // Black queenside
+            );
         if is_castling {
             // kingside
             if tf == 6 {
@@ -37,8 +38,7 @@ impl Board {
                     // White rook
                     self.squares[0][7] = Empty;
                     self.squares[0][5] = RookWhite;
-                }
-                else {
+                } else {
                     // Black rook
                     self.squares[7][7] = Empty;
                     self.squares[7][5] = RookBlack;
@@ -51,8 +51,7 @@ impl Board {
                     // White rook
                     self.squares[0][0] = Empty;
                     self.squares[0][3] = RookWhite;
-                }
-                else {
+                } else {
                     // Black rook
                     self.squares[7][0] = Empty;
                     self.squares[7][3] = RookBlack;
@@ -60,7 +59,7 @@ impl Board {
             }
             // the king is moved at the end of the function
         }
-        
+
         // update castling rights when a king is moving
         if self.is_king(moving_piece) {
             if moving_piece == KingWhite {
@@ -109,8 +108,8 @@ impl Board {
                 if moving_piece == PawnWhite {
                     captured_rank = tr - 1;
                     expected_captured_piece = PawnBlack;
-                }
-                else { // Black pawn
+                } else {
+                    // Black pawn
                     captured_rank = tr + 1;
                     expected_captured_piece = PawnWhite;
                 }
@@ -119,14 +118,13 @@ impl Board {
                 if captured_piece == expected_captured_piece {
                     Logger::debug(&format!("Captured piece: {}", captured_piece));
                     self.squares[captured_rank][ep_f] = Empty;
-                }
-                else {
+                } else {
                     // invalid en passant capture!
                     Logger::warning("Invalid en passant capture attempted!");
                 }
             }
         }
-        
+
         // ---------------------
         // 2. Normal capture
         // ---------------------
@@ -134,15 +132,13 @@ impl Board {
         let destination_square: Piece = self.squares[tr][tf];
         if self.same_color(moving_piece, destination_square) {
             // invalid move!
-        }
-        else {
+        } else {
             if destination_square != Piece::Empty {
                 // Capture piece
                 Logger::debug(&format!("Captured piece: {}", destination_square));
             }
         }
 
-        
         // ---------------------
         // 3. Promotion
         // ---------------------
@@ -179,8 +175,7 @@ impl Board {
         // ---------------------
         if self.side_to_move == Color::White {
             self.side_to_move = Color::Black;
-        }
-        else {
+        } else {
             self.side_to_move = Color::White;
         }
 
@@ -203,7 +198,7 @@ impl Board {
 
 #[cfg(test)]
 mod tests {
-    use crate::board::{Board, Piece, Color};
+    use crate::board::{Board, Color, Piece};
     use crate::moves::Move;
 
     #[test]
@@ -220,23 +215,27 @@ mod tests {
     fn test_halfmove_clock_behavior() {
         let mut b: Board = Board::new();
         assert_eq!(b.halfmove_clock, 0);
-        b.make_move(Move::new(1,4,3,4)); // e2e4 pawn
+        b.make_move(Move::new(1, 4, 3, 4)); // e2e4 pawn
         assert_eq!(b.halfmove_clock, 0);
-        b.make_move(Move::new(6,4,4,4)); // e7e5 pawn
+        b.make_move(Move::new(6, 4, 4, 4)); // e7e5 pawn
         assert_eq!(b.halfmove_clock, 0);
-        b.make_move(Move::new(0,6,2,5)); // g1f3 knight
+        b.make_move(Move::new(0, 6, 2, 5)); // g1f3 knight
         assert_eq!(b.halfmove_clock, 1);
 
         // capture resets halfmove clock
         let mut c: Board = Board::new();
-        for r in 0..8 { for f in 0..8 { c.squares[r][f] = Piece::Empty; } }
+        for r in 0..8 {
+            for f in 0..8 {
+                c.squares[r][f] = Piece::Empty;
+            }
+        }
         c.squares[0][4] = Piece::KingWhite;
         c.squares[7][4] = Piece::KingBlack;
         c.squares[4][4] = Piece::PawnWhite;
         c.squares[5][5] = Piece::PawnBlack;
         c.side_to_move = Color::White;
         c.halfmove_clock = 10;
-        c.make_move(Move::new(4,4,5,5)); // capture pawn
+        c.make_move(Move::new(4, 4, 5, 5)); // capture pawn
         assert_eq!(c.halfmove_clock, 0);
     }
 
@@ -244,9 +243,9 @@ mod tests {
     fn test_fullmove_number_increment() {
         let mut b: Board = Board::new();
         assert_eq!(b.fullmove_number, 1);
-        b.make_move(Move::new(1,4,3,4)); // e2e4 white
+        b.make_move(Move::new(1, 4, 3, 4)); // e2e4 white
         assert_eq!(b.fullmove_number, 1);
-        b.make_move(Move::new(6,4,4,4)); // e7e5 black
+        b.make_move(Move::new(6, 4, 4, 4)); // e7e5 black
         assert_eq!(b.fullmove_number, 2);
     }
 }

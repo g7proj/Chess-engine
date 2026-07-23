@@ -9,7 +9,7 @@ fn test_complete_castling() {
     board.squares[0][1] = Piece::Empty; // b1
     board.squares[0][2] = Piece::Empty; // c1
     board.squares[0][3] = Piece::Empty; // d1
-    
+
     let moves = board.generate_king_moves(0, 4);
 
     // check castling moves
@@ -40,7 +40,7 @@ fn test_complete_castling_under_check() {
 
     // place a knight attacking the king
     board.squares[2][5] = Piece::KnightBlack;
-    
+
     let moves = board.generate_king_moves(0, 4);
 
     // check castling moves
