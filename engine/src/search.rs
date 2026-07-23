@@ -50,7 +50,7 @@ fn move_promotion_bonus(promotion: Promotion) -> i32 {
 }
 
 /// Scores a legal move for alpha-beta move ordering.
-fn move_order_score(board: &Board, mv: &Move) -> i32 {
+fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
     let moving_piece: Piece = board.squares[mv.from_rank][mv.from_file];
     let target_piece: Piece = board.squares[mv.to_rank][mv.to_file];
 
@@ -68,9 +68,10 @@ fn move_order_score(board: &Board, mv: &Move) -> i32 {
         }
     }
 
-    let mut next: Board = board.clone();
-    next.make_move(*mv);
-    if next.is_in_check(next.side_to_move) {
+    let undo = board.make_move(*mv);
+    let gives_check = board.is_in_check(board.side_to_move);
+    board.unmake_move(undo);
+    if gives_check {
         score += 500;
     }
 
@@ -78,8 +79,8 @@ fn move_order_score(board: &Board, mv: &Move) -> i32 {
 }
 
 /// Returns legal moves sorted by search priority.
-fn ordered_legal_moves(board: &Board) -> Vec<Move> {
-    let mut moves: Vec<Move> = board.generate_all_legal_moves();
+fn ordered_legal_moves(board: &mut Board) -> Vec<Move> {
+    let mut moves: Vec<Move> = board.generate_all_legal_moves_mut();
     moves.sort_by_key(|mv| Reverse(move_order_score(board, mv)));
     moves
 }
@@ -93,7 +94,7 @@ fn ordered_legal_moves(board: &Board) -> Vec<Move> {
 ///
 /// `depth` is the number of plies remaining. `alpha` is the best score already
 /// guaranteed, while `beta` is the opponent's cutoff bound.
-fn negamax_alpha_beta(board: &Board, depth: usize, mut alpha: i32, beta: i32) -> i32 {
+fn negamax_alpha_beta(board: &mut Board, depth: usize, mut alpha: i32, beta: i32) -> i32 {
     if depth == 0 {
         return evaluate_position(board);
     }
@@ -107,9 +108,9 @@ fn negamax_alpha_beta(board: &Board, depth: usize, mut alpha: i32, beta: i32) ->
     }
 
     for mv in moves {
-        let mut next: Board = board.clone();
-        next.make_move(mv);
-        let score: i32 = -negamax_alpha_beta(&next, depth - 1, -beta, -alpha);
+        let undo = board.make_move(mv);
+        let score: i32 = -negamax_alpha_beta(board, depth - 1, -beta, -alpha);
+        board.unmake_move(undo);
         if score >= beta {
             return beta;
         }
@@ -124,7 +125,8 @@ fn negamax_alpha_beta(board: &Board, depth: usize, mut alpha: i32, beta: i32) ->
 /// Finds the move with the highest evaluated score for the side to move.
 ///
 /// Returns `None` when the position has no legal moves.
-pub fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
+/// The board is temporarily mutated during search and restored before return.
+pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
     let moves: Vec<Move> = ordered_legal_moves(board);
     if moves.is_empty() {
         return None;
@@ -136,9 +138,9 @@ pub fn find_best_move(board: &Board, depth: usize) -> Option<Move> {
     let beta: i32 = i32::MAX - 1;
 
     for mv in moves {
-        let mut next: Board = board.clone();
-        next.make_move(mv);
-        let score: i32 = -negamax_alpha_beta(&next, depth.saturating_sub(1), -beta, -alpha);
+        let undo = board.make_move(mv);
+        let score: i32 = -negamax_alpha_beta(board, depth.saturating_sub(1), -beta, -alpha);
+        board.unmake_move(undo);
         if score > best_score {
             best_score = score;
             best_move = mv;
@@ -175,7 +177,7 @@ mod tests {
         board.squares[7][0] = Piece::QueenBlack;
         board.side_to_move = Color::White;
 
-        let moves: Vec<Move> = ordered_legal_moves(&board);
+        let moves: Vec<Move> = ordered_legal_moves(&mut board);
         assert_eq!(moves[0], Move::new(0, 0, 7, 0));
     }
 
@@ -187,7 +189,7 @@ mod tests {
         board.squares[6][0] = Piece::PawnWhite;
         board.side_to_move = Color::White;
 
-        let moves: Vec<Move> = ordered_legal_moves(&board);
+        let moves: Vec<Move> = ordered_legal_moves(&mut board);
         assert!(moves[0].promotion != Promotion::None);
     }
 
@@ -200,7 +202,19 @@ mod tests {
         board.squares[7][0] = Piece::QueenBlack;
         board.side_to_move = Color::White;
 
-        let best: Move = find_best_move(&board, 1).expect("best move");
+        let best: Move = find_best_move(&mut board, 1).expect("best move");
         assert_eq!(best, Move::new(0, 0, 7, 0));
+    }
+
+    #[test]
+    fn test_search_restores_board_state() {
+        let mut board: Board = Board::new();
+        let fen_before: String = board.to_fen();
+        let history_before = board.history.clone();
+
+        let _ = find_best_move(&mut board, 3);
+
+        assert_eq!(board.to_fen(), fen_before);
+        assert_eq!(board.history, history_before);
     }
 }

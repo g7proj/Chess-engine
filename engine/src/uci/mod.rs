@@ -340,7 +340,7 @@ pub fn run_uci() {
                 }
                 // Use ordered alpha-beta search at a fixed depth.
                 Logger::info("Processing GO command");
-                match search::find_best_move(&board, 3) {
+                match search::find_best_move(&mut board, 3) {
                     Some(best) => {
                         let best_uci: String = move_to_uci(&best);
                         Logger::info(&format!("Found best move: {}", best_uci));

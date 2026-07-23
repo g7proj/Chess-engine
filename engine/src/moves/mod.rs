@@ -27,6 +27,23 @@ pub struct Move {
     pub promotion: Promotion,
 }
 
+/// Stores the state required to undo one applied move.
+#[derive(Debug)]
+pub struct Undo {
+    pub(crate) from: (usize, usize),
+    pub(crate) to: (usize, usize),
+    pub(crate) moving_piece: Piece,
+    pub(crate) captured_piece: Piece,
+    pub(crate) en_passant_capture: Option<((usize, usize), Piece)>,
+    pub(crate) rook_move: Option<((usize, usize), (usize, usize), Piece)>,
+    pub(crate) previous_side: Color,
+    pub(crate) previous_en_passant: Option<(usize, usize)>,
+    pub(crate) previous_castling: (bool, bool, bool, bool),
+    pub(crate) previous_halfmove_clock: usize,
+    pub(crate) previous_fullmove_number: usize,
+    pub(crate) position_key: String,
+}
+
 impl Move {
     pub fn new(fr: usize, ff: usize, tr: usize, tf: usize) -> Self {
         Move {
@@ -72,6 +89,31 @@ impl Board {
 
     /// Generates all legal moves for the side to move.
     pub fn generate_all_legal_moves(&self) -> Vec<Move> {
+        let all_moves: Vec<Move> = self.generate_pseudo_legal_moves();
+
+        all_moves
+            .into_iter()
+            .filter(|mv: &Move| self.is_legal_move(*mv))
+            .collect()
+    }
+
+    /// Generates legal moves while applying and undoing moves on this board.
+    pub(crate) fn generate_all_legal_moves_mut(&mut self) -> Vec<Move> {
+        let all_moves: Vec<Move> = self.generate_pseudo_legal_moves();
+        let color: Color = self.side_to_move;
+
+        all_moves
+            .into_iter()
+            .filter(|mv: &Move| {
+                let undo: Undo = self.make_move(*mv);
+                let legal: bool = !self.is_in_check(color);
+                self.unmake_move(undo);
+                legal
+            })
+            .collect()
+    }
+
+    fn generate_pseudo_legal_moves(&self) -> Vec<Move> {
         use Piece::*;
         let mut all_moves: Vec<Move> = Vec::new();
 
@@ -98,11 +140,7 @@ impl Board {
             }
         }
 
-        // Now filter out illegal moves
         all_moves
-            .into_iter()
-            .filter(|mv: &Move| self.is_legal_move(*mv))
-            .collect()
     }
 
     fn is_legal_move(&self, mv: Move) -> bool {
