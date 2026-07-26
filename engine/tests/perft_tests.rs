@@ -1,7 +1,7 @@
 use engine::board::Board;
 
 fn assert_perft_counts(fen: &str, expected: &[(usize, u64)]) {
-    let board: Board = Board::from_fen(fen).expect("valid perft FEN");
+    let mut board: Board = Board::from_fen(fen).expect("valid perft FEN");
     for (depth, nodes) in expected {
         assert_eq!(
             board.perft(*depth),
@@ -15,7 +15,7 @@ fn assert_perft_counts(fen: &str, expected: &[(usize, u64)]) {
 
 #[test]
 fn test_perft_start_position_depth_1_to_3() {
-    let board: Board = Board::new();
+    let mut board: Board = Board::new();
 
     assert_eq!(board.perft(1), 20);
     assert_eq!(board.perft(2), 400);
@@ -23,9 +23,20 @@ fn test_perft_start_position_depth_1_to_3() {
 }
 
 #[test]
+fn test_perft_restores_root_position() {
+    let mut board: Board = Board::new();
+    let fen_before: String = board.to_fen();
+    let history_before: std::collections::HashMap<String, usize> = board.history.clone();
+
+    assert_eq!(board.perft(3), 8902);
+    assert_eq!(board.to_fen(), fen_before);
+    assert_eq!(board.history, history_before);
+}
+
+#[test]
 fn test_perft_castling_position_depth_1() {
     let fen: &str = "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
-    let board: Board = Board::from_fen(fen).expect("valid castling FEN");
+    let mut board: Board = Board::from_fen(fen).expect("valid castling FEN");
 
     assert_eq!(board.perft(1), 26);
 }
@@ -33,7 +44,7 @@ fn test_perft_castling_position_depth_1() {
 #[test]
 fn test_perft_en_passant_position_depth_1() {
     let fen: &str = "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1";
-    let board: Board = Board::from_fen(fen).expect("valid en passant FEN");
+    let mut board: Board = Board::from_fen(fen).expect("valid en passant FEN");
 
     assert_eq!(board.perft(1), 7);
 }
@@ -41,7 +52,7 @@ fn test_perft_en_passant_position_depth_1() {
 #[test]
 fn test_perft_promotion_position_depth_1() {
     let fen: &str = "4k3/P7/8/8/8/8/8/4K3 w - - 0 1";
-    let board: Board = Board::from_fen(fen).expect("valid promotion FEN");
+    let mut board: Board = Board::from_fen(fen).expect("valid promotion FEN");
 
     assert_eq!(board.perft(1), 9);
 }

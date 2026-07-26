@@ -67,22 +67,22 @@ impl Move {
 }
 
 impl Board {
-    /// Count legal leaf nodes from current position.
-    pub fn perft(&self, depth: usize) -> u64 {
+    /// Counts legal leaf nodes using make/unmake traversal.
+    pub fn perft(&mut self, depth: usize) -> u64 {
         if depth == 0 {
             return 1;
         }
 
-        let moves: Vec<Move> = self.generate_all_legal_moves();
+        let moves: Vec<Move> = self.generate_all_legal_moves_mut();
         if depth == 1 {
             return moves.len() as u64;
         }
 
         let mut nodes: u64 = 0;
         for mv in moves {
-            let mut next: Board = self.clone();
-            next.make_move(mv);
-            nodes += next.perft(depth - 1);
+            let undo: Undo = self.make_move_for_search(mv);
+            nodes += self.perft(depth - 1);
+            self.unmake_move(undo);
         }
         nodes
     }

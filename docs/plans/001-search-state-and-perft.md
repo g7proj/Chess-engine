@@ -2,7 +2,7 @@
 
 ## Status
 
-The game/search move-application split is complete. Converting `perft` to make/unmake remains in scope.
+The game/search move-application split and make/unmake perft traversal are complete.
 
 ## Goal
 
@@ -23,4 +23,4 @@ Remove game-history overhead from search and make `perft` use the same make/unma
 
 ## Completion
 
-Perft counts remain unchanged, no search node clones remain, and benchmark output improves or clearly identifies the next bottleneck.
+Perft counts remain unchanged, no recursive perft clones remain, and benchmark output is recorded for future comparisons.

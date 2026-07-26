@@ -113,28 +113,32 @@ fn parse_perft_depth(cmd: &str) -> Result<usize, String> {
     Ok(depth)
 }
 
-/// Runs a perft command against the supplied position.
-pub fn handle_perft(cmd: &str, board: &Board) -> Result<u64, String> {
+/// Runs a perft command and restores the supplied position before returning.
+pub fn handle_perft(cmd: &str, board: &mut Board) -> Result<u64, String> {
     let depth: usize = parse_perft_depth(cmd)?;
     Ok(board.perft(depth))
 }
 
 /// Counts perft nodes for each legal root move.
-fn divide_root_moves(board: &Board, depth: usize) -> Vec<(String, u64)> {
+fn divide_root_moves(board: &mut Board, depth: usize) -> Vec<(String, u64)> {
     let mut entries: Vec<(String, u64)> = Vec::new();
 
-    for mv in board.generate_all_legal_moves() {
-        let mut next: Board = board.clone();
-        next.make_move(mv);
-        let nodes: u64 = if depth <= 1 { 1 } else { next.perft(depth - 1) };
+    for mv in board.generate_all_legal_moves_mut() {
+        let undo: crate::moves::Undo = board.make_move_for_search(mv);
+        let nodes: u64 = if depth <= 1 {
+            1
+        } else {
+            board.perft(depth - 1)
+        };
+        board.unmake_move(undo);
         entries.push((move_to_uci(&mv), nodes));
     }
 
     entries
 }
 
-/// Runs a divide command against the supplied position.
-pub fn handle_divide(cmd: &str, board: &Board) -> Result<Vec<(String, u64)>, String> {
+/// Runs a divide command and restores the supplied position before returning.
+pub fn handle_divide(cmd: &str, board: &mut Board) -> Result<Vec<(String, u64)>, String> {
     let depth: usize = parse_perft_depth(cmd)?;
     if depth == 0 {
         return Err("divide depth must be at least 1".to_string());
@@ -251,7 +255,7 @@ pub fn run_cli(args: &[String]) -> Result<(), String> {
     let mode = mode.ok_or_else(|| "missing CLI mode: use --perft or --divide".to_string())?;
     let depth = depth.ok_or_else(|| "missing CLI depth".to_string())?;
 
-    let board: Board = if let Some(fen) = fen {
+    let mut board: Board = if let Some(fen) = fen {
         Board::from_fen(&fen)?
     } else {
         Board::new()
@@ -264,7 +268,8 @@ pub fn run_cli(args: &[String]) -> Result<(), String> {
             print_perft_result(nodes, depth, "", Some(start.elapsed().as_millis()));
         }
         "divide" => {
-            let entries: Vec<(String, u64)> = handle_divide(&format!("divide {}", depth), &board)?;
+            let entries: Vec<(String, u64)> =
+                handle_divide(&format!("divide {}", depth), &mut board)?;
             print_divide_result(&entries, depth, "", Some(start.elapsed().as_millis()));
         }
         _ => unreachable!(),
@@ -319,7 +324,7 @@ pub fn run_uci() {
             }
             cmd if cmd.starts_with("go") => {
                 if cmd.split_whitespace().nth(1) == Some("perft") {
-                    match handle_perft(cmd, &board) {
+                    match handle_perft(cmd, &mut board) {
                         Ok(nodes) => {
                             let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
                             print_perft_result(nodes, depth, "", None);
@@ -329,7 +334,7 @@ pub fn run_uci() {
                     continue;
                 }
                 if cmd.split_whitespace().nth(1) == Some("divide") {
-                    match handle_divide(cmd, &board) {
+                    match handle_divide(cmd, &mut board) {
                         Ok(entries) => {
                             let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
                             print_divide_result(&entries, depth, "", None);
@@ -361,14 +366,14 @@ pub fn run_uci() {
             cmd if cmd.starts_with("setoption") => {
                 handle_setoption(cmd, &mut options);
             }
-            cmd if cmd.starts_with("perft") => match handle_perft(cmd, &board) {
+            cmd if cmd.starts_with("perft") => match handle_perft(cmd, &mut board) {
                 Ok(nodes) => {
                     let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
                     print_perft_result(nodes, depth, "", None);
                 }
                 Err(e) => println!("info string Error handling perft command: {}", e),
             },
-            cmd if cmd.starts_with("divide") => match handle_divide(cmd, &board) {
+            cmd if cmd.starts_with("divide") => match handle_divide(cmd, &mut board) {
                 Ok(entries) => {
                     let depth: usize = parse_perft_depth(cmd).unwrap_or(0);
                     print_divide_result(&entries, depth, "", None);
@@ -590,30 +595,30 @@ mod tests {
 
     #[test]
     fn test_handle_perft_parses_plain_command() {
-        let board: Board = Board::new();
-        let nodes: u64 = handle_perft("perft 1", &board).unwrap();
+        let mut board: Board = Board::new();
+        let nodes: u64 = handle_perft("perft 1", &mut board).unwrap();
         assert_eq!(nodes, 20);
     }
 
     #[test]
     fn test_handle_perft_parses_go_form() {
-        let board: Board = Board::new();
-        let nodes: u64 = handle_perft("go perft 2", &board).unwrap();
+        let mut board: Board = Board::new();
+        let nodes: u64 = handle_perft("go perft 2", &mut board).unwrap();
         assert_eq!(nodes, 400);
     }
 
     #[test]
     fn test_handle_divide_parses_plain_command() {
-        let board: Board = Board::new();
-        let entries: Vec<(String, u64)> = handle_divide("divide 1", &board).unwrap();
+        let mut board: Board = Board::new();
+        let entries: Vec<(String, u64)> = handle_divide("divide 1", &mut board).unwrap();
         assert_eq!(entries.len(), 20);
         assert!(entries.iter().all(|(_, nodes)| *nodes == 1));
     }
 
     #[test]
     fn test_handle_divide_parses_go_form() {
-        let board: Board = Board::new();
-        let entries: Vec<(String, u64)> = handle_divide("go divide 1", &board).unwrap();
+        let mut board: Board = Board::new();
+        let entries: Vec<(String, u64)> = handle_divide("go divide 1", &mut board).unwrap();
         assert_eq!(entries.len(), 20);
         assert_eq!(entries.iter().map(|(_, nodes)| *nodes).sum::<u64>(), 20);
     }
