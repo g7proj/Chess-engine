@@ -68,7 +68,7 @@ fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
         }
     }
 
-    let undo = board.make_move(*mv);
+    let undo: crate::moves::Undo = board.make_move_for_search(*mv);
     let gives_check = board.is_in_check(board.side_to_move);
     board.unmake_move(undo);
     if gives_check {
@@ -108,7 +108,7 @@ fn negamax_alpha_beta(board: &mut Board, depth: usize, mut alpha: i32, beta: i32
     }
 
     for mv in moves {
-        let undo = board.make_move(mv);
+        let undo: crate::moves::Undo = board.make_move_for_search(mv);
         let score: i32 = -negamax_alpha_beta(board, depth - 1, -beta, -alpha);
         board.unmake_move(undo);
         if score >= beta {
@@ -138,7 +138,7 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
     let beta: i32 = i32::MAX - 1;
 
     for mv in moves {
-        let undo = board.make_move(mv);
+        let undo: crate::moves::Undo = board.make_move_for_search(mv);
         let score: i32 = -negamax_alpha_beta(board, depth.saturating_sub(1), -beta, -alpha);
         board.unmake_move(undo);
         if score > best_score {

@@ -1,5 +1,9 @@
 # 001 - Search State and Perft
 
+## Status
+
+The game/search move-application split is complete. Converting `perft` to make/unmake remains in scope.
+
 ## Goal
 
 Remove game-history overhead from search and make `perft` use the same make/unmake discipline as alpha-beta.

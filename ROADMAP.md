@@ -4,7 +4,7 @@ This roadmap tracks the planned evolution of the chess engine. Detailed implemen
 
 ## Now
 
-- [ ] Separate game-state updates from search-state updates.
+- [x] Separate game-state updates from search-state updates.
 - [ ] Convert `perft` traversal to make/unmake.
 - [ ] Add search statistics and reproducible performance output.
 

@@ -41,7 +41,7 @@ pub struct Undo {
     pub(crate) previous_castling: (bool, bool, bool, bool),
     pub(crate) previous_halfmove_clock: usize,
     pub(crate) previous_fullmove_number: usize,
-    pub(crate) position_key: String,
+    pub(crate) position_key: Option<String>,
 }
 
 impl Move {
@@ -105,7 +105,7 @@ impl Board {
         all_moves
             .into_iter()
             .filter(|mv: &Move| {
-                let undo: Undo = self.make_move(*mv);
+                let undo: Undo = self.make_move_for_search(*mv);
                 let legal: bool = !self.is_in_check(color);
                 self.unmake_move(undo);
                 legal

@@ -5,6 +5,15 @@ use crate::moves::{Move, Undo};
 impl Board {
     /// Applies a move and returns the state required to undo it.
     pub fn make_move(&mut self, mv: Move) -> Undo {
+        self.make_move_internal(mv, true)
+    }
+
+    /// Applies a move for search without updating game repetition history.
+    pub(crate) fn make_move_for_search(&mut self, mv: Move) -> Undo {
+        self.make_move_internal(mv, false)
+    }
+
+    fn make_move_internal(&mut self, mv: Move, record_history: bool) -> Undo {
         use crate::moves::Promotion;
         use Piece::*;
 
@@ -197,8 +206,12 @@ impl Board {
             self.side_to_move = Color::White;
         }
 
-        // Record position in history
-        self.record_position();
+        let position_key: Option<String> = if record_history {
+            self.record_position();
+            Some(self.repetition_key())
+        } else {
+            None
+        };
         // Update halfmove clock
         if self.is_pawn(moving_piece) || destination_square != Piece::Empty {
             // pawn moved or capture occurred => reset halfmove clock
@@ -224,16 +237,18 @@ impl Board {
             previous_castling,
             previous_halfmove_clock,
             previous_fullmove_number,
-            position_key: self.repetition_key(),
+            position_key,
         }
     }
 
     /// Restores the board state returned by `make_move`.
     pub fn unmake_move(&mut self, undo: Undo) {
-        if let Some(count) = self.history.get_mut(&undo.position_key) {
-            *count -= 1;
-            if *count == 0 {
-                self.history.remove(&undo.position_key);
+        if let Some(position_key) = undo.position_key {
+            if let Some(count) = self.history.get_mut(&position_key) {
+                *count -= 1;
+                if *count == 0 {
+                    self.history.remove(&position_key);
+                }
             }
         }
 
@@ -278,6 +293,15 @@ mod tests {
     #[test]
     fn test_make_unmake_restores_normal_move() {
         assert_round_trip(Board::new(), Move::new(1, 4, 3, 4));
+    }
+
+    #[test]
+    fn test_search_move_does_not_update_history() {
+        let mut board: Board = Board::new();
+        let undo = board.make_move_for_search(Move::new(1, 4, 3, 4));
+        assert!(board.history.is_empty());
+        board.unmake_move(undo);
+        assert!(board.history.is_empty());
     }
 
     #[test]
