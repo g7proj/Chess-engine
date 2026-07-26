@@ -1,9 +1,38 @@
 use std::cmp::Reverse;
+use std::time::Instant;
 
 use crate::board::{Board, Piece};
 use crate::moves::{Move, Promotion};
 
 const MATE_SCORE: i32 = 30_000;
+
+/// Stores counters and timing data collected during one search.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SearchStats {
+    pub depth: usize,
+    pub nodes: u64,
+    pub cutoffs: u64,
+    pub elapsed_ms: u128,
+}
+
+impl SearchStats {
+    /// Returns the measured search speed in nodes per second.
+    pub fn nps(&self) -> u64 {
+        if self.elapsed_ms == 0 {
+            self.nodes
+        } else {
+            ((self.nodes as u128 * 1000) / self.elapsed_ms) as u64
+        }
+    }
+}
+
+/// Contains the selected move, its score, and the associated search metrics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SearchResult {
+    pub best_move: Option<Move>,
+    pub score: i32,
+    pub stats: SearchStats,
+}
 
 /// Returns the signed material value of a piece.
 fn piece_value(piece: Piece) -> i32 {
@@ -94,7 +123,14 @@ fn ordered_legal_moves(board: &mut Board) -> Vec<Move> {
 ///
 /// `depth` is the number of plies remaining. `alpha` is the best score already
 /// guaranteed, while `beta` is the opponent's cutoff bound.
-fn negamax_alpha_beta(board: &mut Board, depth: usize, mut alpha: i32, beta: i32) -> i32 {
+fn negamax_alpha_beta(
+    board: &mut Board,
+    depth: usize,
+    mut alpha: i32,
+    beta: i32,
+    stats: &mut SearchStats,
+) -> i32 {
+    stats.nodes += 1;
     if depth == 0 {
         return evaluate_position(board);
     }
@@ -109,9 +145,10 @@ fn negamax_alpha_beta(board: &mut Board, depth: usize, mut alpha: i32, beta: i32
 
     for mv in moves {
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
-        let score: i32 = -negamax_alpha_beta(board, depth - 1, -beta, -alpha);
+        let score: i32 = -negamax_alpha_beta(board, depth - 1, -beta, -alpha, stats);
         board.unmake_move(undo);
         if score >= beta {
+            stats.cutoffs += 1;
             return beta;
         }
         if score > alpha {
@@ -127,9 +164,25 @@ fn negamax_alpha_beta(board: &mut Board, depth: usize, mut alpha: i32, beta: i32
 /// Returns `None` when the position has no legal moves.
 /// The board is temporarily mutated during search and restored before return.
 pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
+    find_best_move_with_stats(board, depth).best_move
+}
+
+/// Searches for the best move and returns metrics for the completed search.
+pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResult {
+    let start: Instant = Instant::now();
+    let mut stats: SearchStats = SearchStats {
+        depth,
+        nodes: 1,
+        ..SearchStats::default()
+    };
     let moves: Vec<Move> = ordered_legal_moves(board);
     if moves.is_empty() {
-        return None;
+        stats.elapsed_ms = start.elapsed().as_millis();
+        return SearchResult {
+            best_move: None,
+            score: 0,
+            stats,
+        };
     }
 
     let mut best_move: Move = moves[0];
@@ -139,7 +192,8 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
 
     for mv in moves {
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
-        let score: i32 = -negamax_alpha_beta(board, depth.saturating_sub(1), -beta, -alpha);
+        let score: i32 =
+            -negamax_alpha_beta(board, depth.saturating_sub(1), -beta, -alpha, &mut stats);
         board.unmake_move(undo);
         if score > best_score {
             best_score = score;
@@ -150,7 +204,12 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
         }
     }
 
-    Some(best_move)
+    stats.elapsed_ms = start.elapsed().as_millis();
+    SearchResult {
+        best_move: Some(best_move),
+        score: best_score,
+        stats,
+    }
 }
 
 #[cfg(test)]
@@ -216,5 +275,17 @@ mod tests {
 
         assert_eq!(board.to_fen(), fen_before);
         assert_eq!(board.history, history_before);
+    }
+
+    #[test]
+    fn test_search_reports_statistics() {
+        let mut board: Board = Board::new();
+        let result: SearchResult = find_best_move_with_stats(&mut board, 3);
+
+        assert!(result.best_move.is_some());
+        assert_eq!(result.stats.depth, 3);
+        assert!(result.stats.nodes > 1);
+        assert!(result.stats.cutoffs > 0);
+        assert!(result.stats.nps() > 0);
     }
 }

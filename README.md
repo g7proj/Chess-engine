@@ -11,7 +11,7 @@ Rust chess engine with a standard UCI interface. It can be connected to any UCI-
   - legal move filtering
   - check, checkmate, and stalemate detection
   - castling, en passant, and promotion support
-  - alpha-beta search with basic move ordering and make/unmake traversal
+  - alpha-beta search with basic move ordering, make/unmake traversal, and search statistics
 - `ml/` - learning experiments
 
 ## Main features
@@ -175,6 +175,8 @@ cargo test --test search_bench -- --ignored --nocapture
 ```
 
 The benchmark checks that the search returns a move and restores the board after every iteration. It reports elapsed time for depths 3 and 4; it is ignored during normal test runs because timing-based tests are machine-dependent.
+
+UCI `go` also reports search depth, score, nodes, NPS, elapsed time, and the selected principal move.
 
 ## Notes
 

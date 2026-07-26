@@ -1,5 +1,9 @@
 # 002 - Search Observability
 
+## Status
+
+Complete for fixed-depth alpha-beta search. Iterative-deepening statistics will extend this result later.
+
 ## Goal
 
 Make search performance measurable without changing search results.

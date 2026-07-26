@@ -194,6 +194,33 @@ fn print_divide_result(
     }
 }
 
+/// Prints the completed search score, move, and performance statistics.
+fn print_search_result(result: &search::SearchResult) {
+    let stats: &search::SearchStats = &result.stats;
+    if let Some(best_move) = result.best_move {
+        println!(
+            "info depth {} score cp {} nodes {} nps {} time {} pv {}",
+            stats.depth,
+            result.score,
+            stats.nodes,
+            stats.nps(),
+            stats.elapsed_ms,
+            move_to_uci(&best_move)
+        );
+        println!("bestmove {}", move_to_uci(&best_move));
+    } else {
+        println!(
+            "info depth {} score cp {} nodes {} nps {} time {}",
+            stats.depth,
+            result.score,
+            stats.nodes,
+            stats.nps(),
+            stats.elapsed_ms
+        );
+        println!("bestmove (none)");
+    }
+}
+
 /// Runs the standalone perft or divide command-line mode.
 pub fn run_cli(args: &[String]) -> Result<(), String> {
     let mut mode: Option<&str> = None;
@@ -345,17 +372,13 @@ pub fn run_uci() {
                 }
                 // Use ordered alpha-beta search at a fixed depth.
                 Logger::info("Processing GO command");
-                match search::find_best_move(&mut board, 3) {
-                    Some(best) => {
-                        let best_uci: String = move_to_uci(&best);
-                        Logger::info(&format!("Found best move: {}", best_uci));
-                        println!("bestmove {}", best_uci);
-                    }
-                    None => {
-                        Logger::info("No legal moves found");
-                        println!("bestmove (none)");
-                    }
+                let result: search::SearchResult = search::find_best_move_with_stats(&mut board, 3);
+                if let Some(best) = result.best_move {
+                    Logger::info(&format!("Found best move: {}", move_to_uci(&best)));
+                } else {
+                    Logger::info("No legal moves found");
                 }
+                print_search_result(&result);
             }
             cmd if cmd.starts_with("stop") => {
                 handle_stop();
