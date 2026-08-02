@@ -26,10 +26,11 @@ impl SearchStats {
     }
 }
 
-/// Contains the selected move, its score, and the associated search metrics.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Contains the selected move, principal variation, score, and search metrics.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchResult {
     pub best_move: Option<Move>,
+    pub pv: Vec<Move>,
     pub score: i32,
     pub stats: SearchStats,
 }
@@ -108,9 +109,16 @@ fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
 }
 
 /// Returns legal moves sorted by search priority.
-fn ordered_legal_moves(board: &mut Board) -> Vec<Move> {
+fn ordered_legal_moves(board: &mut Board, preferred_move: Option<Move>) -> Vec<Move> {
     let mut moves: Vec<Move> = board.generate_all_legal_moves_mut();
-    moves.sort_by_key(|mv| Reverse(move_order_score(board, mv)));
+    moves.sort_by_key(|mv| {
+        let pv_bonus: i32 = if Some(*mv) == preferred_move {
+            1_000_000
+        } else {
+            0
+        };
+        Reverse(move_order_score(board, mv) + pv_bonus)
+    });
     moves
 }
 
@@ -128,14 +136,18 @@ fn negamax_alpha_beta(
     depth: usize,
     mut alpha: i32,
     beta: i32,
+    ply: usize,
+    preferred_pv: &[Move],
+    pv_table: &mut [Vec<Move>],
     stats: &mut SearchStats,
 ) -> i32 {
     stats.nodes += 1;
+    pv_table[ply].clear();
     if depth == 0 {
         return evaluate_position(board);
     }
 
-    let moves: Vec<Move> = ordered_legal_moves(board);
+    let moves: Vec<Move> = ordered_legal_moves(board, preferred_pv.get(ply).copied());
     if moves.is_empty() {
         if board.is_in_check(board.side_to_move) {
             return -MATE_SCORE + depth as i32;
@@ -145,14 +157,29 @@ fn negamax_alpha_beta(
 
     for mv in moves {
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
-        let score: i32 = -negamax_alpha_beta(board, depth - 1, -beta, -alpha, stats);
+        let score: i32 = -negamax_alpha_beta(
+            board,
+            depth - 1,
+            -beta,
+            -alpha,
+            ply + 1,
+            preferred_pv,
+            pv_table,
+            stats,
+        );
         board.unmake_move(undo);
         if score >= beta {
             stats.cutoffs += 1;
+            let child_pv: Vec<Move> = pv_table[ply + 1].clone();
+            pv_table[ply] = vec![mv];
+            pv_table[ply].extend(child_pv);
             return beta;
         }
         if score > alpha {
             alpha = score;
+            let child_pv: Vec<Move> = pv_table[ply + 1].clone();
+            pv_table[ply] = vec![mv];
+            pv_table[ply].extend(child_pv);
         }
     }
 
@@ -169,22 +196,44 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
 
 /// Searches for the best move and returns metrics for the completed search.
 pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResult {
+    search_at_depth(board, depth, &[])
+}
+
+/// Searches progressively deeper and reuses the previous principal variation.
+pub fn find_best_move_iterative_with_stats(board: &mut Board, max_depth: usize) -> SearchResult {
+    if max_depth == 0 {
+        return search_at_depth(board, 0, &[]);
+    }
+
+    let mut result: SearchResult = search_at_depth(board, 1, &[]);
+    for depth in 2..=max_depth {
+        let next: SearchResult = search_at_depth(board, depth, &result.pv);
+        if next.best_move.is_some() {
+            result = next;
+        }
+    }
+    result
+}
+
+fn search_at_depth(board: &mut Board, depth: usize, preferred_pv: &[Move]) -> SearchResult {
     let start: Instant = Instant::now();
     let mut stats: SearchStats = SearchStats {
         depth,
         nodes: 1,
         ..SearchStats::default()
     };
-    let moves: Vec<Move> = ordered_legal_moves(board);
+    let moves: Vec<Move> = ordered_legal_moves(board, preferred_pv.first().copied());
     if moves.is_empty() {
         stats.elapsed_ms = start.elapsed().as_millis();
         return SearchResult {
             best_move: None,
+            pv: Vec::new(),
             score: 0,
             stats,
         };
     }
 
+    let mut pv_table: Vec<Vec<Move>> = vec![Vec::new(); depth + 2];
     let mut best_move: Move = moves[0];
     let mut best_score: i32 = i32::MIN;
     let mut alpha: i32 = i32::MIN + 1;
@@ -192,12 +241,23 @@ pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResul
 
     for mv in moves {
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
-        let score: i32 =
-            -negamax_alpha_beta(board, depth.saturating_sub(1), -beta, -alpha, &mut stats);
+        let score: i32 = -negamax_alpha_beta(
+            board,
+            depth.saturating_sub(1),
+            -beta,
+            -alpha,
+            1,
+            preferred_pv,
+            &mut pv_table,
+            &mut stats,
+        );
         board.unmake_move(undo);
         if score > best_score {
             best_score = score;
             best_move = mv;
+            let child_pv: Vec<Move> = pv_table[1].clone();
+            pv_table[0] = vec![mv];
+            pv_table[0].extend(child_pv);
         }
         if score > alpha {
             alpha = score;
@@ -207,6 +267,7 @@ pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResul
     stats.elapsed_ms = start.elapsed().as_millis();
     SearchResult {
         best_move: Some(best_move),
+        pv: pv_table[0].clone(),
         score: best_score,
         stats,
     }
@@ -236,7 +297,7 @@ mod tests {
         board.squares[7][0] = Piece::QueenBlack;
         board.side_to_move = Color::White;
 
-        let moves: Vec<Move> = ordered_legal_moves(&mut board);
+        let moves: Vec<Move> = ordered_legal_moves(&mut board, None);
         assert_eq!(moves[0], Move::new(0, 0, 7, 0));
     }
 
@@ -248,7 +309,7 @@ mod tests {
         board.squares[6][0] = Piece::PawnWhite;
         board.side_to_move = Color::White;
 
-        let moves: Vec<Move> = ordered_legal_moves(&mut board);
+        let moves: Vec<Move> = ordered_legal_moves(&mut board, None);
         assert!(moves[0].promotion != Promotion::None);
     }
 
@@ -287,5 +348,17 @@ mod tests {
         assert!(result.stats.nodes > 1);
         assert!(result.stats.cutoffs > 0);
         assert!(result.stats.nps() > 0);
+    }
+
+    #[test]
+    fn test_iterative_search_returns_complete_pv() {
+        let mut board: Board = Board::new();
+        let result: SearchResult = find_best_move_iterative_with_stats(&mut board, 3);
+
+        assert!(result.best_move.is_some());
+        assert_eq!(result.stats.depth, 3);
+        assert!(!result.pv.is_empty());
+        assert_eq!(result.pv[0], result.best_move.unwrap());
+        assert!(result.pv.len() <= 3);
     }
 }

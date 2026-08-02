@@ -198,6 +198,12 @@ fn print_divide_result(
 fn print_search_result(result: &search::SearchResult) {
     let stats: &search::SearchStats = &result.stats;
     if let Some(best_move) = result.best_move {
+        let pv: String = result
+            .pv
+            .iter()
+            .map(move_to_uci)
+            .collect::<Vec<String>>()
+            .join(" ");
         println!(
             "info depth {} score cp {} nodes {} nps {} time {} pv {}",
             stats.depth,
@@ -205,8 +211,9 @@ fn print_search_result(result: &search::SearchResult) {
             stats.nodes,
             stats.nps(),
             stats.elapsed_ms,
-            move_to_uci(&best_move)
+            pv
         );
+        println!("info string cutoffs {}", stats.cutoffs);
         println!("bestmove {}", move_to_uci(&best_move));
     } else {
         println!(
@@ -217,6 +224,7 @@ fn print_search_result(result: &search::SearchResult) {
             stats.nps(),
             stats.elapsed_ms
         );
+        println!("info string cutoffs {}", stats.cutoffs);
         println!("bestmove (none)");
     }
 }
@@ -372,7 +380,8 @@ pub fn run_uci() {
                 }
                 // Use ordered alpha-beta search at a fixed depth.
                 Logger::info("Processing GO command");
-                let result: search::SearchResult = search::find_best_move_with_stats(&mut board, 3);
+                let result: search::SearchResult =
+                    search::find_best_move_iterative_with_stats(&mut board, 3);
                 if let Some(best) = result.best_move {
                     Logger::info(&format!("Found best move: {}", move_to_uci(&best)));
                 } else {

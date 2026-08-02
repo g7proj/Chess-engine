@@ -1,5 +1,9 @@
 # 003 - Iterative Deepening
 
+## Status
+
+Complete for fixed maximum depth. Time management and interruption remain separate roadmap tasks.
+
 ## Goal
 
 Search progressively deeper while retaining the best completed result.
