@@ -9,12 +9,14 @@ use crate::board::{Board, Piece};
 use crate::moves::{Move, Promotion};
 
 const MATE_SCORE: i32 = 30_000;
+const MAX_QUIESCENCE_PLY: usize = 32;
 
 /// Stores counters and timing data collected during one search.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct SearchStats {
     pub depth: usize,
     pub nodes: u64,
+    pub quiescence_nodes: u64,
     pub cutoffs: u64,
     pub elapsed_ms: u128,
 }
@@ -151,24 +153,29 @@ fn negamax_alpha_beta(
     preferred_pv: &[Move],
     pv_table: &mut [Vec<Move>],
     stats: &mut SearchStats,
-) -> i32 {
-    stats.nodes += 1;
+    limits: &SearchLimits,
+    deadline: Option<Instant>,
+) -> Option<i32> {
     pv_table[ply].clear();
-    if depth == 0 {
-        return evaluate_position(board);
+    if search_should_stop(limits, deadline) {
+        return None;
     }
+    if depth == 0 {
+        return quiescence_search(board, alpha, beta, ply, stats, limits, deadline);
+    }
+    stats.nodes += 1;
 
     let moves: Vec<Move> = ordered_legal_moves(board, preferred_pv.get(ply).copied());
     if moves.is_empty() {
         if board.is_in_check(board.side_to_move) {
-            return -MATE_SCORE + depth as i32;
+            return Some(-MATE_SCORE + depth as i32);
         }
-        return 0;
+        return Some(0);
     }
 
     for mv in moves {
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
-        let score: i32 = -negamax_alpha_beta(
+        let child_score: Option<i32> = negamax_alpha_beta(
             board,
             depth - 1,
             -beta,
@@ -177,14 +184,17 @@ fn negamax_alpha_beta(
             preferred_pv,
             pv_table,
             stats,
+            limits,
+            deadline,
         );
         board.unmake_move(undo);
+        let score: i32 = -child_score?;
         if score >= beta {
             stats.cutoffs += 1;
             let child_pv: Vec<Move> = pv_table[ply + 1].clone();
             pv_table[ply] = vec![mv];
             pv_table[ply].extend(child_pv);
-            return beta;
+            return Some(beta);
         }
         if score > alpha {
             alpha = score;
@@ -194,7 +204,74 @@ fn negamax_alpha_beta(
         }
     }
 
-    alpha
+    Some(alpha)
+}
+
+/// Extends leaf evaluation through legal captures and promotions.
+fn quiescence_search(
+    board: &mut Board,
+    mut alpha: i32,
+    beta: i32,
+    ply: usize,
+    stats: &mut SearchStats,
+    limits: &SearchLimits,
+    deadline: Option<Instant>,
+) -> Option<i32> {
+    stats.nodes += 1;
+    stats.quiescence_nodes += 1;
+    if search_should_stop(limits, deadline) {
+        return None;
+    }
+
+    let in_check: bool = board.is_in_check(board.side_to_move);
+    if ply >= MAX_QUIESCENCE_PLY {
+        return Some(evaluate_position(board));
+    }
+    if !in_check {
+        let stand_pat: i32 = evaluate_position(board);
+        if stand_pat >= beta {
+            stats.cutoffs += 1;
+            return Some(beta);
+        }
+        alpha = alpha.max(stand_pat);
+    }
+
+    let moves: Vec<Move> = ordered_legal_moves(board, None)
+        .into_iter()
+        .filter(|mv| in_check || is_capture(board, mv) || mv.promotion != Promotion::None)
+        .collect();
+    if in_check && moves.is_empty() {
+        return Some(-MATE_SCORE + ply as i32);
+    }
+
+    for mv in moves {
+        let undo: crate::moves::Undo = board.make_move_for_search(mv);
+        let child_score: Option<i32> =
+            quiescence_search(board, -beta, -alpha, ply + 1, stats, limits, deadline);
+        board.unmake_move(undo);
+        let score: i32 = -child_score?;
+        if score >= beta {
+            stats.cutoffs += 1;
+            return Some(beta);
+        }
+        alpha = alpha.max(score);
+    }
+
+    Some(alpha)
+}
+
+fn is_capture(board: &Board, mv: &Move) -> bool {
+    board.squares[mv.to_rank][mv.to_file] != Piece::Empty
+        || (board.is_pawn(board.squares[mv.from_rank][mv.from_file])
+            && board.en_passant == Some((mv.to_rank, mv.to_file)))
+}
+
+fn search_should_stop(limits: &SearchLimits, deadline: Option<Instant>) -> bool {
+    limits
+        .stop
+        .as_ref()
+        .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        || deadline.is_some_and(|limit| Instant::now() >= limit)
 }
 
 /// Finds the move with the highest evaluated score for the side to move.
@@ -207,7 +284,7 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
 
 /// Searches for the best move and returns metrics for the completed search.
 pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResult {
-    search_at_depth(board, depth, &[])
+    search_at_depth(board, depth, &[], &SearchLimits::default(), None)
 }
 
 /// Searches progressively deeper and reuses the previous principal variation.
@@ -221,13 +298,22 @@ pub fn find_best_move_iterative_with_limits(
     max_depth: usize,
     limits: SearchLimits,
 ) -> SearchResult {
-    let start: Instant = Instant::now();
+    let search_start: Instant = Instant::now();
+    let deadline: Option<Instant> = limits
+        .time_limit_ms
+        .map(|ms| search_start + std::time::Duration::from_millis(ms.min(u64::MAX as u128) as u64));
     if max_depth == 0 {
-        return search_at_depth(board, 0, &[]);
+        return search_at_depth(board, 0, &[], &limits, deadline);
     }
 
-    let mut result: SearchResult = search_at_depth(board, 1, &[]);
-    for depth in 2..=max_depth {
+    let fallback: Option<Move> = board.generate_all_legal_moves().first().copied();
+    let mut result: SearchResult = SearchResult {
+        best_move: fallback,
+        pv: fallback.into_iter().collect(),
+        score: evaluate_position(board),
+        stats: SearchStats::default(),
+    };
+    for depth in 1..=max_depth {
         if limits
             .stop
             .as_ref()
@@ -236,21 +322,26 @@ pub fn find_best_move_iterative_with_limits(
             // Stop signal received, exit the search loop
             break;
         }
-        if limits
-            .time_limit_ms
-            .is_some_and(|ms| start.elapsed().as_millis() >= ms)
-        {
+        if search_should_stop(&limits, deadline) {
             break;
         }
-        let next: SearchResult = search_at_depth(board, depth, &result.pv);
-        if next.best_move.is_some() {
+        let next: SearchResult = search_at_depth(board, depth, &result.pv, &limits, deadline);
+        if next.stats.depth == depth && next.best_move.is_some() {
             result = next;
+        } else {
+            break;
         }
     }
     result
 }
 
-fn search_at_depth(board: &mut Board, depth: usize, preferred_pv: &[Move]) -> SearchResult {
+fn search_at_depth(
+    board: &mut Board,
+    depth: usize,
+    preferred_pv: &[Move],
+    limits: &SearchLimits,
+    deadline: Option<Instant>,
+) -> SearchResult {
     let start: Instant = Instant::now();
     let mut stats: SearchStats = SearchStats {
         depth,
@@ -276,7 +367,7 @@ fn search_at_depth(board: &mut Board, depth: usize, preferred_pv: &[Move]) -> Se
 
     for mv in moves {
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
-        let score: i32 = -negamax_alpha_beta(
+        let child_score: Option<i32> = negamax_alpha_beta(
             board,
             depth.saturating_sub(1),
             -beta,
@@ -285,8 +376,20 @@ fn search_at_depth(board: &mut Board, depth: usize, preferred_pv: &[Move]) -> Se
             preferred_pv,
             &mut pv_table,
             &mut stats,
+            limits,
+            deadline,
         );
         board.unmake_move(undo);
+        let Some(child_score) = child_score else {
+            stats.elapsed_ms = start.elapsed().as_millis();
+            return SearchResult {
+                best_move: None,
+                pv: Vec::new(),
+                score: 0,
+                stats,
+            };
+        };
+        let score: i32 = -child_score;
         if score > best_score {
             best_score = score;
             best_move = mv;
@@ -409,7 +512,115 @@ mod tests {
             },
         );
 
-        assert_eq!(result.stats.depth, 1);
+        assert_eq!(result.stats.depth, 0);
         assert!(result.best_move.is_some());
+    }
+
+    #[test]
+    fn test_quiescence_search_sees_forced_recapture() {
+        let fen: &str = "k7/8/8/2p5/3r4/8/8/3QK3 w - - 0 1";
+        let mut board: Board = Board::from_fen(fen).expect("valid tactical FEN");
+        let capture: Move = Move::new(0, 3, 3, 3);
+        assert!(board.generate_all_legal_moves().contains(&capture));
+        let undo = board.make_move_for_search(capture);
+        assert_eq!(evaluate_position(&board), -800);
+        let mut stats: SearchStats = SearchStats::default();
+        let score: i32 = quiescence_search(
+            &mut board,
+            i32::MIN + 1,
+            i32::MAX - 1,
+            0,
+            &mut stats,
+            &SearchLimits::default(),
+            None,
+        )
+        .expect("search should complete");
+        board.unmake_move(undo);
+
+        assert_eq!(score, 100);
+        assert!(stats.quiescence_nodes > 1);
+        assert_eq!(board.to_fen(), fen);
+    }
+
+    #[test]
+    fn test_quiescence_search_counts_en_passant_capture() {
+        let fen: &str = "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1";
+        let mut board: Board = Board::from_fen(fen).expect("valid en passant FEN");
+        let mut stats: SearchStats = SearchStats::default();
+        let score: i32 = quiescence_search(
+            &mut board,
+            i32::MIN + 1,
+            i32::MAX - 1,
+            0,
+            &mut stats,
+            &SearchLimits::default(),
+            None,
+        )
+        .expect("search should complete");
+
+        assert_eq!(score, 100);
+        assert!(stats.quiescence_nodes > 1);
+        assert_eq!(board.to_fen(), fen);
+    }
+
+    #[test]
+    fn test_quiescence_search_searches_check_evasions() {
+        let fen: &str = "4k3/8/8/8/8/8/8/K3R3 b - - 0 1";
+        let mut board: Board = Board::from_fen(fen).expect("valid check FEN");
+        let mut stats: SearchStats = SearchStats::default();
+        let score = quiescence_search(
+            &mut board,
+            i32::MIN + 1,
+            i32::MAX - 1,
+            0,
+            &mut stats,
+            &SearchLimits::default(),
+            None,
+        )
+        .expect("search should complete");
+
+        assert!(board.is_in_check(board.side_to_move));
+        assert!(stats.quiescence_nodes > 1);
+        assert!(score > -MATE_SCORE);
+        assert_eq!(board.to_fen(), fen);
+    }
+
+    #[test]
+    fn test_quiescence_search_detects_checkmate() {
+        let fen: &str = "7k/5KQ1/8/8/8/8/8/8 b - - 0 1";
+        let mut board: Board = Board::from_fen(fen).expect("valid checkmate FEN");
+        let mut stats: SearchStats = SearchStats::default();
+        let score = quiescence_search(
+            &mut board,
+            i32::MIN + 1,
+            i32::MAX - 1,
+            0,
+            &mut stats,
+            &SearchLimits::default(),
+            None,
+        )
+        .expect("search should complete");
+
+        assert_eq!(score, -MATE_SCORE);
+        assert_eq!(board.to_fen(), fen);
+    }
+
+    #[test]
+    fn test_stopped_search_returns_legal_fallback() {
+        let mut board: Board = Board::new();
+        let legal_moves: Vec<Move> = board.generate_all_legal_moves();
+        let stop: Arc<AtomicBool> = Arc::new(AtomicBool::new(true));
+        let result = find_best_move_iterative_with_limits(
+            &mut board,
+            5,
+            SearchLimits {
+                time_limit_ms: None,
+                stop: Some(stop),
+            },
+        );
+
+        assert!(result.best_move.is_some_and(|mv| legal_moves.contains(&mv)));
+        assert_eq!(result.stats.depth, 0);
+        assert_eq!(board.to_fen(), Board::new().to_fen());
     }
 }

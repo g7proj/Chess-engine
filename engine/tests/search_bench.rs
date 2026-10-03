@@ -12,6 +12,7 @@ fn benchmark_search_make_unmake() {
         let iterations: u32 = if depth == 3 { 20 } else { 5 };
         let start: Instant = Instant::now();
         let mut nodes: u64 = 0;
+        let mut quiescence_nodes: u64 = 0;
         let mut cutoffs: u64 = 0;
 
         for _ in 0..iterations {
@@ -21,6 +22,7 @@ fn benchmark_search_make_unmake() {
             assert!(result.stats.nodes > 0);
             assert!(result.stats.cutoffs > 0);
             nodes += result.stats.nodes;
+            quiescence_nodes += result.stats.quiescence_nodes;
             cutoffs += result.stats.cutoffs;
             assert_eq!(board.to_fen(), Board::new().to_fen());
         }
@@ -32,8 +34,8 @@ fn benchmark_search_make_unmake() {
             (nodes as u128 * 1000) / elapsed_ms
         };
         println!(
-            "search make/unmake depth {}: {} iterations, {} nodes, {} cutoffs in {} ms ({} nps)",
-            depth, iterations, nodes, cutoffs, elapsed_ms, nps
+            "search depth {}: {} iterations, {} nodes ({} qnodes), {} cutoffs in {} ms ({} nps)",
+            depth, iterations, nodes, quiescence_nodes, cutoffs, elapsed_ms, nps
         );
     }
 }

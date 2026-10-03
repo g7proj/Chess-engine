@@ -219,7 +219,10 @@ fn print_search_result(result: &search::SearchResult) {
             stats.elapsed_ms,
             pv
         );
-        println!("info string cutoffs {}", stats.cutoffs);
+        println!(
+            "info string qnodes {} cutoffs {}",
+            stats.quiescence_nodes, stats.cutoffs
+        );
         println!("bestmove {}", move_to_uci(&best_move));
     } else {
         println!(
@@ -230,7 +233,10 @@ fn print_search_result(result: &search::SearchResult) {
             stats.nps(),
             stats.elapsed_ms
         );
-        println!("info string cutoffs {}", stats.cutoffs);
+        println!(
+            "info string qnodes {} cutoffs {}",
+            stats.quiescence_nodes, stats.cutoffs
+        );
         println!("bestmove (none)");
     }
 }
