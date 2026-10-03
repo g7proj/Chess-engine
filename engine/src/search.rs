@@ -10,6 +10,26 @@ use crate::moves::{Move, Promotion};
 
 const MATE_SCORE: i32 = 30_000;
 const MAX_QUIESCENCE_PLY: usize = 32;
+const PAWN_POSITION_BONUS: [[i32; 8]; 8] = [
+    [0, 0, 0, 0, 0, 0, 0, 0],
+    [5, 10, 10, -20, -20, 10, 10, 5],
+    [5, -5, -10, 0, 0, -10, -5, 5],
+    [0, 0, 0, 20, 20, 0, 0, 0],
+    [5, 5, 10, 25, 25, 10, 5, 5],
+    [10, 10, 20, 30, 30, 20, 10, 10],
+    [50, 50, 50, 50, 50, 50, 50, 50],
+    [0, 0, 0, 0, 0, 0, 0, 0],
+];
+const KNIGHT_POSITION_BONUS: [[i32; 8]; 8] = [
+    [-50, -40, -30, -30, -30, -30, -40, -50],
+    [-40, -20, 0, 5, 5, 0, -20, -40],
+    [-30, 5, 10, 15, 15, 10, 5, -30],
+    [-30, 0, 15, 20, 20, 15, 0, -30],
+    [-30, 5, 15, 20, 20, 15, 5, -30],
+    [-30, 0, 10, 15, 15, 10, 0, -30],
+    [-40, -20, 0, 0, 0, 0, -20, -40],
+    [-50, -40, -30, -30, -30, -30, -40, -50],
+];
 
 /// Stores counters and timing data collected during one search.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -48,36 +68,44 @@ pub struct SearchLimits {
     pub stop: Option<Arc<AtomicBool>>,
 }
 
-/// Returns the signed material value of a piece.
+/// Returns the material value of a piece in centipawns.
 fn piece_value(piece: Piece) -> i32 {
     match piece {
-        Piece::PawnWhite => 100,
-        Piece::PawnBlack => -100,
-        Piece::KnightWhite => 320,
-        Piece::KnightBlack => -320,
-        Piece::BishopWhite => 330,
-        Piece::BishopBlack => -330,
-        Piece::RookWhite => 500,
-        Piece::RookBlack => -500,
-        Piece::QueenWhite => 900,
-        Piece::QueenBlack => -900,
+        Piece::PawnWhite | Piece::PawnBlack => 100,
+        Piece::KnightWhite | Piece::KnightBlack => 320,
+        Piece::BishopWhite | Piece::BishopBlack => 330,
+        Piece::RookWhite | Piece::RookBlack => 500,
+        Piece::QueenWhite | Piece::QueenBlack => 900,
         _ => 0,
     }
 }
 
-/// Returns a material score in centipawns from the side-to-move perspective.
+/// Returns material and piece-square scores from the side-to-move perspective.
 /// Positive values favor the side to move; negative values favor its opponent.
 fn evaluate_position(board: &Board) -> i32 {
-    let mut score: i32 = 0;
+    let mut white_score: i32 = 0;
     for rank in 0..8 {
         for file in 0..8 {
-            score += piece_value(board.squares[rank][file]);
+            let piece: Piece = board.squares[rank][file];
+            let (piece_score, positional_bonus): (i32, i32) = match piece {
+                Piece::PawnWhite => (100, PAWN_POSITION_BONUS[rank][file]),
+                Piece::PawnBlack => (100, PAWN_POSITION_BONUS[7 - rank][7 - file]),
+                Piece::KnightWhite => (320, KNIGHT_POSITION_BONUS[rank][file]),
+                Piece::KnightBlack => (320, KNIGHT_POSITION_BONUS[7 - rank][7 - file]),
+                _ => (piece_value(piece), 0),
+            };
+            let sign: i32 = match piece.color() {
+                Some(crate::board::Color::White) => 1,
+                Some(crate::board::Color::Black) => -1,
+                None => 0,
+            };
+            white_score += sign * (piece_score + positional_bonus);
         }
     }
     if board.side_to_move == crate::board::Color::White {
-        score
+        white_score
     } else {
-        -score
+        -white_score
     }
 }
 
@@ -465,6 +493,36 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluation_prefers_central_knight() {
+        let central =
+            Board::from_fen("4k3/8/8/8/3N4/8/8/4K3 w - - 0 1").expect("valid central-knight FEN");
+        let edge =
+            Board::from_fen("4k3/8/8/8/8/8/8/N3K3 w - - 0 1").expect("valid edge-knight FEN");
+
+        assert!(evaluate_position(&central) > evaluate_position(&edge));
+    }
+
+    #[test]
+    fn test_evaluation_is_symmetric_for_colors_and_side_to_move() {
+        let white_to_move =
+            Board::from_fen("4k3/8/8/8/3N4/4P3/8/4K3 w - - 0 1").expect("valid white position FEN");
+        let black_to_move = Board::from_fen("4k3/8/4p3/3n4/8/8/8/4K3 b - - 0 1")
+            .expect("valid mirrored position FEN");
+
+        assert_eq!(
+            evaluate_position(&white_to_move),
+            evaluate_position(&black_to_move)
+        );
+        assert_eq!(
+            evaluate_position(&white_to_move),
+            -evaluate_position(&Board {
+                side_to_move: Color::Black,
+                ..white_to_move.clone()
+            })
+        );
+    }
+
+    #[test]
     fn test_search_restores_board_state() {
         let mut board: Board = Board::new();
         let fen_before: String = board.to_fen();
@@ -537,7 +595,7 @@ mod tests {
         .expect("search should complete");
         board.unmake_move(undo);
 
-        assert_eq!(score, 100);
+        assert_eq!(score, 125);
         assert!(stats.quiescence_nodes > 1);
         assert_eq!(board.to_fen(), fen);
     }
@@ -558,7 +616,7 @@ mod tests {
         )
         .expect("search should complete");
 
-        assert_eq!(score, 100);
+        assert_eq!(score, 130);
         assert!(stats.quiescence_nodes > 1);
         assert_eq!(board.to_fen(), fen);
     }

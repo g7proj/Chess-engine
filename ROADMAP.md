@@ -20,7 +20,7 @@ See [Plan 003](docs/plans/003-iterative-deepening.md) and [Plan 004](docs/plans/
 
 ## Later
 
-- [ ] Improve evaluation beyond material counting.
+- [ ] Complete evaluation improvements (currently includes material and pawn/knight piece-square bonuses).
 - [ ] Add Zobrist hashing and a transposition table.
 - [ ] Revisit move ordering using transposition, killer, and history heuristics.
 - [ ] Evaluate a bitboard representation after profiling.
