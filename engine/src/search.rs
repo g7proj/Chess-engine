@@ -35,6 +35,12 @@ pub struct SearchResult {
     pub stats: SearchStats,
 }
 
+/// Defines an optional time budget for one search.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SearchLimits {
+    pub time_limit_ms: Option<u128>,
+}
+
 /// Returns the signed material value of a piece.
 fn piece_value(piece: Piece) -> i32 {
     match piece {
@@ -201,12 +207,28 @@ pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResul
 
 /// Searches progressively deeper and reuses the previous principal variation.
 pub fn find_best_move_iterative_with_stats(board: &mut Board, max_depth: usize) -> SearchResult {
+    find_best_move_iterative_with_limits(board, max_depth, SearchLimits::default())
+}
+
+/// Searches progressively deeper until the depth or time budget is exhausted.
+pub fn find_best_move_iterative_with_limits(
+    board: &mut Board,
+    max_depth: usize,
+    limits: SearchLimits,
+) -> SearchResult {
+    let start: Instant = Instant::now();
     if max_depth == 0 {
         return search_at_depth(board, 0, &[]);
     }
 
     let mut result: SearchResult = search_at_depth(board, 1, &[]);
     for depth in 2..=max_depth {
+        if limits
+            .time_limit_ms
+            .is_some_and(|ms| start.elapsed().as_millis() >= ms)
+        {
+            break;
+        }
         let next: SearchResult = search_at_depth(board, depth, &result.pv);
         if next.best_move.is_some() {
             result = next;
@@ -360,5 +382,20 @@ mod tests {
         assert!(!result.pv.is_empty());
         assert_eq!(result.pv[0], result.best_move.unwrap());
         assert!(result.pv.len() <= 3);
+    }
+
+    #[test]
+    fn test_iterative_search_respects_zero_time_budget_between_iterations() {
+        let mut board: Board = Board::new();
+        let result = find_best_move_iterative_with_limits(
+            &mut board,
+            3,
+            SearchLimits {
+                time_limit_ms: Some(0),
+            },
+        );
+
+        assert_eq!(result.stats.depth, 1);
+        assert!(result.best_move.is_some());
     }
 }

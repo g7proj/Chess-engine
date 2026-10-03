@@ -229,6 +229,16 @@ fn print_search_result(result: &search::SearchResult) {
     }
 }
 
+/// Extracts a UCI `movetime` limit in milliseconds, when present.
+fn parse_search_limits(cmd: &str) -> search::SearchLimits {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    let time_limit_ms: Option<u128> = parts
+        .windows(2)
+        .find(|pair| pair[0] == "movetime")
+        .and_then(|pair| pair[1].parse().ok());
+    search::SearchLimits { time_limit_ms }
+}
+
 /// Runs the standalone perft or divide command-line mode.
 pub fn run_cli(args: &[String]) -> Result<(), String> {
     let mut mode: Option<&str> = None;
@@ -380,8 +390,9 @@ pub fn run_uci() {
                 }
                 // Use ordered alpha-beta search at a fixed depth.
                 Logger::info("Processing GO command");
+                let limits: search::SearchLimits = parse_search_limits(cmd);
                 let result: search::SearchResult =
-                    search::find_best_move_iterative_with_stats(&mut board, 3);
+                    search::find_best_move_iterative_with_limits(&mut board, 3, limits);
                 if let Some(best) = result.best_move {
                     Logger::info(&format!("Found best move: {}", move_to_uci(&best)));
                 } else {
@@ -659,5 +670,11 @@ mod tests {
     fn test_print_divide_result_format() {
         let entries: Vec<(String, u64)> = vec![("e2e4".to_string(), 20), ("d2d4".to_string(), 20)];
         print_divide_result(&entries, 1, "", Some(0));
+    }
+
+    #[test]
+    fn test_parse_search_limits_movetime() {
+        let limits = parse_search_limits("go movetime 250");
+        assert_eq!(limits.time_limit_ms, Some(250));
     }
 }

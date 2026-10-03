@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete for fixed maximum depth. Time management and interruption remain separate roadmap tasks.
+Complete for fixed maximum depth. The current `movetime` support checks the budget between completed iterations; cooperative node-level cancellation and asynchronous UCI `stop` remain future work.
 
 ## Goal
 
