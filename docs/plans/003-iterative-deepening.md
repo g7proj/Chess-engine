@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete for fixed maximum depth. The current `movetime` support checks the budget between completed iterations; cooperative node-level cancellation and asynchronous UCI `stop` remain future work.
+Complete. `movetime` and asynchronous UCI `stop` return the last completed iterative-deepening result. Cancellation is checked between completed iterations; a stop received during one iteration waits for that iteration to finish.
 
 ## Goal
 

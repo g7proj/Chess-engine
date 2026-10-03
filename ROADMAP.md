@@ -13,7 +13,7 @@ See [Plan 001](docs/plans/001-search-state-and-perft.md) and [Plan 002](docs/pla
 ## Next
 
 - [x] Add iterative deepening with a principal variation.
-- [ ] Add UCI time management and functional `stop` handling.
+- [x] Add UCI time management and functional `stop` handling.
 - [ ] Add quiescence search for tactical stability.
 
 See [Plan 003](docs/plans/003-iterative-deepening.md) and [Plan 004](docs/plans/004-quiescence-search.md).

@@ -177,7 +177,7 @@ cargo test --test search_bench -- --ignored --nocapture
 The benchmark checks that the search returns a move and restores the board after every iteration. It reports elapsed time for depths 3 and 4; it is ignored during normal test runs because timing-based tests are machine-dependent.
 
 UCI `go` searches progressively to the current fixed maximum depth and reports depth, score, nodes, NPS, elapsed time, cutoffs, and the principal variation.
-`go movetime <milliseconds>` limits iterative deepening between completed iterations; `stop` remains a placeholder until search runs asynchronously.
+`go movetime <milliseconds>` limits iterative deepening between completed iterations. Search runs on a worker, so `stop` can be received while searching and returns the last completed iteration.
 
 ## Notes
 

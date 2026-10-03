@@ -1,4 +1,8 @@
 use std::cmp::Reverse;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Instant;
 
 use crate::board::{Board, Piece};
@@ -36,9 +40,10 @@ pub struct SearchResult {
 }
 
 /// Defines an optional time budget for one search.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SearchLimits {
     pub time_limit_ms: Option<u128>,
+    pub stop: Option<Arc<AtomicBool>>,
 }
 
 /// Returns the signed material value of a piece.
@@ -224,6 +229,14 @@ pub fn find_best_move_iterative_with_limits(
     let mut result: SearchResult = search_at_depth(board, 1, &[]);
     for depth in 2..=max_depth {
         if limits
+            .stop
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::Relaxed))
+        {
+            // Stop signal received, exit the search loop
+            break;
+        }
+        if limits
             .time_limit_ms
             .is_some_and(|ms| start.elapsed().as_millis() >= ms)
         {
@@ -392,6 +405,7 @@ mod tests {
             3,
             SearchLimits {
                 time_limit_ms: Some(0),
+                stop: None,
             },
         );
 

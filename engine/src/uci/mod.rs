@@ -4,6 +4,12 @@ use crate::moves::{Move, Promotion};
 use crate::search;
 use std::collections::HashMap;
 use std::io::{self, BufRead};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+use std::thread;
 use std::time::Instant;
 
 /// Parses an algebraic square into zero-based `(rank, file)` indices.
@@ -236,7 +242,10 @@ fn parse_search_limits(cmd: &str) -> search::SearchLimits {
         .windows(2)
         .find(|pair| pair[0] == "movetime")
         .and_then(|pair| pair[1].parse().ok());
-    search::SearchLimits { time_limit_ms }
+    search::SearchLimits {
+        time_limit_ms,
+        stop: None,
+    }
 }
 
 /// Runs the standalone perft or divide command-line mode.
@@ -329,15 +338,38 @@ pub fn run_uci() {
     Logger::init(crate::logger::LogLevel::Info, "engine_debug.log");
     Logger::info("\n=== Engine started ===");
     let stdin: io::Stdin = io::stdin();
+    let (input_tx, input_rx) = mpsc::channel::<String>();
+    thread::spawn(move || {
+        for line in stdin.lock().lines().flatten() {
+            if input_tx.send(line).is_err() {
+                break;
+            }
+        }
+    });
     let mut board: Board = Board::new();
     let mut options: HashMap<String, String> = HashMap::new();
+    let mut active_search: Option<(mpsc::Receiver<search::SearchResult>, Arc<AtomicBool>)> = None;
 
-    for line in stdin.lock().lines() {
-        let command: String = match line {
-            Ok(cmd) => cmd,
-            Err(e) => {
-                Logger::error(&format!("ERROR reading stdin: {}", e));
-                break;
+    loop {
+        // Check if a search is active and if it has completed
+        if let Some((receiver, _)) = &active_search {
+            if let Ok(result) = receiver.try_recv() {
+                print_search_result(&result);
+                active_search = None;
+                continue;
+            }
+        }
+        // Receive a command from the input channel, with a timeout if a search is active
+        let command: String = if active_search.is_some() {
+            match input_rx.recv_timeout(std::time::Duration::from_millis(10)) {
+                Ok(cmd) => cmd,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        } else {
+            match input_rx.recv() {
+                Ok(cmd) => cmd,
+                Err(_) => break,
             }
         };
         Logger::info(&format!("CMD: {}", command));
@@ -354,6 +386,13 @@ pub fn run_uci() {
                 handle_ucinewgame(&mut board, &mut options);
             }
             "quit" => {
+                // If a search is active, stop it and print the result before quitting
+                if let Some((receiver, stop)) = active_search.take() {
+                    stop.store(true, Ordering::Relaxed);
+                    if let Ok(result) = receiver.recv() {
+                        print_search_result(&result);
+                    }
+                }
                 break;
             }
             cmd if cmd.starts_with("position") => {
@@ -390,18 +429,34 @@ pub fn run_uci() {
                 }
                 // Use ordered alpha-beta search at a fixed depth.
                 Logger::info("Processing GO command");
-                let limits: search::SearchLimits = parse_search_limits(cmd);
-                let result: search::SearchResult =
-                    search::find_best_move_iterative_with_limits(&mut board, 3, limits);
-                if let Some(best) = result.best_move {
-                    Logger::info(&format!("Found best move: {}", move_to_uci(&best)));
-                } else {
-                    Logger::info("No legal moves found");
+                if active_search.is_some() {
+                    continue;
                 }
-                print_search_result(&result);
+                let limits: search::SearchLimits = parse_search_limits(cmd);
+                let stop = Arc::new(AtomicBool::new(false));
+                let mut worker_limits = limits;
+                worker_limits.stop = Some(Arc::clone(&stop));
+                let (result_tx, result_rx) = mpsc::channel();
+                let mut search_board: Board = board.clone();
+                thread::spawn(move || {
+                    let result = search::find_best_move_iterative_with_limits(
+                        &mut search_board,
+                        3,
+                        worker_limits,
+                    );
+                    let _ = result_tx.send(result);
+                });
+                active_search = Some((result_rx, stop));
             }
             cmd if cmd.starts_with("stop") => {
-                handle_stop();
+                if let Some((receiver, stop)) = active_search.take() {
+                    stop.store(true, Ordering::Relaxed);
+                    if let Ok(result) = receiver.recv() {
+                        print_search_result(&result);
+                    }
+                } else {
+                    handle_stop();
+                }
             }
             cmd if cmd.starts_with("ponderhit") => {
                 handle_ponderhit();
