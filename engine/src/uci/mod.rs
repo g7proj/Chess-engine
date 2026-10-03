@@ -220,8 +220,8 @@ fn print_search_result(result: &search::SearchResult) {
             pv
         );
         println!(
-            "info string qnodes {} cutoffs {}",
-            stats.quiescence_nodes, stats.cutoffs
+            "info string qnodes {} cutoffs {} tthits {} ttcutoffs {}",
+            stats.quiescence_nodes, stats.cutoffs, stats.tt_hits, stats.tt_cutoffs
         );
         println!("bestmove {}", move_to_uci(&best_move));
     } else {
@@ -234,8 +234,8 @@ fn print_search_result(result: &search::SearchResult) {
             stats.elapsed_ms
         );
         println!(
-            "info string qnodes {} cutoffs {}",
-            stats.quiescence_nodes, stats.cutoffs
+            "info string qnodes {} cutoffs {} tthits {} ttcutoffs {}",
+            stats.quiescence_nodes, stats.cutoffs, stats.tt_hits, stats.tt_cutoffs
         );
         println!("bestmove (none)");
     }
@@ -251,6 +251,7 @@ fn parse_search_limits(cmd: &str) -> search::SearchLimits {
     search::SearchLimits {
         time_limit_ms,
         stop: None,
+        use_transposition_table: true,
     }
 }
 

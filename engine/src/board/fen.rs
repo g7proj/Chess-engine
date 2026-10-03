@@ -146,6 +146,7 @@ impl Board {
 
         // 6. Fullmove number
         board.fullmove_number = parts[5].parse().unwrap_or(1);
+        board.refresh_zobrist_key();
 
         Ok(board)
     }

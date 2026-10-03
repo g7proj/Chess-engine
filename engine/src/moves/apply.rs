@@ -33,6 +33,7 @@ impl Board {
         );
         let previous_halfmove_clock: usize = self.halfmove_clock;
         let previous_fullmove_number: usize = self.fullmove_number;
+        let previous_zobrist_key: u64 = self.zobrist_key;
         let mut en_passant_capture: Option<((usize, usize), Piece)> = None;
         let mut rook_move: Option<((usize, usize), (usize, usize), Piece)> = None;
 
@@ -225,6 +226,44 @@ impl Board {
             self.fullmove_number += 1;
         }
 
+        use crate::board::zobrist::{castling_key, en_passant_key, piece_key, side_key};
+        let previous_castling_flags = [
+            previous_castling.0,
+            previous_castling.1,
+            previous_castling.2,
+            previous_castling.3,
+        ];
+        let current_castling_flags = [
+            self.white_kingside_castle,
+            self.white_queenside_castle,
+            self.black_kingside_castle,
+            self.black_queenside_castle,
+        ];
+        let mut key = previous_zobrist_key ^ side_key();
+        key ^= piece_key(moving_piece, fr, ff) ^ piece_key(piece_to_place, tr, tf);
+        key ^= piece_key(captured_piece, tr, tf);
+        if let Some(((captured_rank, captured_file), captured)) = en_passant_capture {
+            key ^= piece_key(captured, captured_rank, captured_file);
+        }
+        if let Some(((rook_from_rank, rook_from_file), (rook_to_rank, rook_to_file), rook)) =
+            rook_move
+        {
+            key ^= piece_key(rook, rook_from_rank, rook_from_file);
+            key ^= piece_key(rook, rook_to_rank, rook_to_file);
+        }
+        for index in 0..4 {
+            if previous_castling_flags[index] != current_castling_flags[index] {
+                key ^= castling_key(index);
+            }
+        }
+        if let Some((rank, file)) = old_ep {
+            key ^= en_passant_key(rank, file);
+        }
+        if let Some((rank, file)) = self.en_passant {
+            key ^= en_passant_key(rank, file);
+        }
+        self.zobrist_key = key;
+
         Undo {
             from: (fr, ff),
             to: (tr, tf),
@@ -238,6 +277,7 @@ impl Board {
             previous_halfmove_clock,
             previous_fullmove_number,
             position_key,
+            previous_zobrist_key,
         }
     }
 
@@ -273,6 +313,7 @@ impl Board {
         ) = undo.previous_castling;
         self.halfmove_clock = undo.previous_halfmove_clock;
         self.fullmove_number = undo.previous_fullmove_number;
+        self.zobrist_key = undo.previous_zobrist_key;
     }
 }
 

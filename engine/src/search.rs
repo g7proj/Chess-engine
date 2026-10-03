@@ -18,6 +18,8 @@ const ISOLATED_PAWN_PENALTY: i32 = 10;
 const DEVELOPED_MINOR_BONUS: i32 = 10;
 const KING_SHIELD_BONUS: i32 = 10;
 const KING_PRESSURE_PENALTY: i32 = 8;
+const TRANSPOSITION_TABLE_SIZE: usize = 1 << 16;
+const MATE_SCORE_THRESHOLD: i32 = MATE_SCORE - 1_000;
 const PAWN_POSITION_BONUS: [[i32; 8]; 8] = [
     [0, 0, 0, 0, 0, 0, 0, 0],
     [5, 10, 10, -20, -20, 10, 10, 5],
@@ -46,6 +48,8 @@ pub struct SearchStats {
     pub nodes: u64,
     pub quiescence_nodes: u64,
     pub cutoffs: u64,
+    pub tt_hits: u64,
+    pub tt_cutoffs: u64,
     pub elapsed_ms: u128,
 }
 
@@ -70,10 +74,65 @@ pub struct SearchResult {
 }
 
 /// Defines an optional time budget for one search.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SearchLimits {
     pub time_limit_ms: Option<u128>,
     pub stop: Option<Arc<AtomicBool>>,
+    pub use_transposition_table: bool,
+}
+
+impl Default for SearchLimits {
+    fn default() -> Self {
+        Self {
+            time_limit_ms: None,
+            stop: None,
+            use_transposition_table: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BoundType {
+    Exact,
+    Lower,
+    Upper,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TranspositionEntry {
+    key: u64,
+    depth: usize,
+    score: i32,
+    bound: BoundType,
+    best_move: Option<Move>,
+}
+
+struct TranspositionTable {
+    entries: Vec<Option<TranspositionEntry>>,
+}
+
+impl TranspositionTable {
+    fn new(enabled: bool) -> Self {
+        Self {
+            entries: if enabled {
+                vec![None; TRANSPOSITION_TABLE_SIZE]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    fn probe(&self, key: u64) -> Option<TranspositionEntry> {
+        self.entries[key as usize & (self.entries.len() - 1)].filter(|entry| entry.key == key)
+    }
+
+    fn store(&mut self, entry: TranspositionEntry) {
+        let index = entry.key as usize & (self.entries.len() - 1);
+        let slot = &mut self.entries[index];
+        if slot.is_none_or(|old| entry.depth >= old.depth) {
+            *slot = Some(entry);
+        }
+    }
 }
 
 /// Returns the material value of a piece in centipawns.
@@ -537,13 +596,14 @@ fn negamax_alpha_beta(
     board: &mut Board,
     depth: usize,
     mut alpha: i32,
-    beta: i32,
+    mut beta: i32,
     ply: usize,
     preferred_pv: &[Move],
     pv_table: &mut [Vec<Move>],
     stats: &mut SearchStats,
     limits: &SearchLimits,
     deadline: Option<Instant>,
+    transposition_table: &mut TranspositionTable,
 ) -> Option<i32> {
     pv_table[ply].clear();
     if search_should_stop(limits, deadline) {
@@ -554,10 +614,43 @@ fn negamax_alpha_beta(
     }
     stats.nodes += 1;
 
-    let moves: Vec<Move> = ordered_legal_moves(board, preferred_pv.get(ply).copied());
+    let original_alpha = alpha;
+    let original_beta = beta;
+    let key = board.zobrist_key;
+    let tt_entry = if limits.use_transposition_table {
+        transposition_table.probe(key)
+    } else {
+        None
+    };
+    let tt_move = tt_entry.and_then(|entry| entry.best_move);
+    let tt_lower_bound_applied =
+        tt_entry.is_some_and(|entry| entry.depth >= depth && entry.bound == BoundType::Lower);
+    if let Some(entry) = tt_entry {
+        stats.tt_hits += 1;
+        if entry.depth >= depth {
+            let score = score_from_table(entry.score, ply);
+            match entry.bound {
+                BoundType::Exact => {
+                    pv_table[ply] = entry.best_move.into_iter().collect();
+                    stats.tt_cutoffs += 1;
+                    return Some(score);
+                }
+                BoundType::Lower => alpha = alpha.max(score),
+                BoundType::Upper => beta = beta.min(score),
+            }
+            if alpha >= beta {
+                pv_table[ply] = entry.best_move.into_iter().collect();
+                stats.tt_cutoffs += 1;
+                return Some(score);
+            }
+        }
+    }
+
+    let moves: Vec<Move> =
+        ordered_legal_moves(board, tt_move.or_else(|| preferred_pv.get(ply).copied()));
     if moves.is_empty() {
         if board.is_in_check(board.side_to_move) {
-            return Some(-MATE_SCORE + depth as i32);
+            return Some(-MATE_SCORE + ply as i32);
         }
         return Some(0);
     }
@@ -575,6 +668,7 @@ fn negamax_alpha_beta(
             stats,
             limits,
             deadline,
+            transposition_table,
         );
         board.unmake_move(undo);
         let score: i32 = -child_score?;
@@ -583,6 +677,15 @@ fn negamax_alpha_beta(
             let child_pv: Vec<Move> = pv_table[ply + 1].clone();
             pv_table[ply] = vec![mv];
             pv_table[ply].extend(child_pv);
+            if limits.use_transposition_table {
+                transposition_table.store(TranspositionEntry {
+                    key,
+                    depth,
+                    score: score_to_table(beta, ply),
+                    bound: BoundType::Lower,
+                    best_move: Some(mv),
+                });
+            }
             return Some(beta);
         }
         if score > alpha {
@@ -593,7 +696,45 @@ fn negamax_alpha_beta(
         }
     }
 
+    if limits.use_transposition_table {
+        let bound = if alpha <= original_alpha {
+            BoundType::Upper
+        } else if alpha >= original_beta {
+            BoundType::Lower
+        } else if tt_lower_bound_applied && pv_table[ply].is_empty() {
+            BoundType::Lower
+        } else {
+            BoundType::Exact
+        };
+        transposition_table.store(TranspositionEntry {
+            key,
+            depth,
+            score: score_to_table(alpha, ply),
+            bound,
+            best_move: pv_table[ply].first().copied(),
+        });
+    }
     Some(alpha)
+}
+
+fn score_to_table(score: i32, ply: usize) -> i32 {
+    if score >= MATE_SCORE_THRESHOLD {
+        score + ply as i32
+    } else if score <= -MATE_SCORE_THRESHOLD {
+        score - ply as i32
+    } else {
+        score
+    }
+}
+
+fn score_from_table(score: i32, ply: usize) -> i32 {
+    if score >= MATE_SCORE_THRESHOLD {
+        score - ply as i32
+    } else if score <= -MATE_SCORE_THRESHOLD {
+        score + ply as i32
+    } else {
+        score
+    }
 }
 
 /// Extends leaf evaluation through legal captures and promotions.
@@ -673,7 +814,15 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
 
 /// Searches for the best move and returns metrics for the completed search.
 pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResult {
-    search_at_depth(board, depth, &[], &SearchLimits::default(), None)
+    let mut transposition_table = TranspositionTable::new(true);
+    search_at_depth(
+        board,
+        depth,
+        &[],
+        &SearchLimits::default(),
+        None,
+        &mut transposition_table,
+    )
 }
 
 /// Searches progressively deeper and reuses the previous principal variation.
@@ -687,12 +836,13 @@ pub fn find_best_move_iterative_with_limits(
     max_depth: usize,
     limits: SearchLimits,
 ) -> SearchResult {
+    let mut transposition_table = TranspositionTable::new(limits.use_transposition_table);
     let search_start: Instant = Instant::now();
     let deadline: Option<Instant> = limits
         .time_limit_ms
         .map(|ms| search_start + std::time::Duration::from_millis(ms.min(u64::MAX as u128) as u64));
     if max_depth == 0 {
-        return search_at_depth(board, 0, &[], &limits, deadline);
+        return search_at_depth(board, 0, &[], &limits, deadline, &mut transposition_table);
     }
 
     let fallback: Option<Move> = board.generate_all_legal_moves().first().copied();
@@ -714,7 +864,14 @@ pub fn find_best_move_iterative_with_limits(
         if search_should_stop(&limits, deadline) {
             break;
         }
-        let next: SearchResult = search_at_depth(board, depth, &result.pv, &limits, deadline);
+        let next: SearchResult = search_at_depth(
+            board,
+            depth,
+            &result.pv,
+            &limits,
+            deadline,
+            &mut transposition_table,
+        );
         if next.stats.depth == depth && next.best_move.is_some() {
             result = next;
         } else {
@@ -730,14 +887,28 @@ fn search_at_depth(
     preferred_pv: &[Move],
     limits: &SearchLimits,
     deadline: Option<Instant>,
+    transposition_table: &mut TranspositionTable,
 ) -> SearchResult {
+    board.refresh_zobrist_key();
     let start: Instant = Instant::now();
     let mut stats: SearchStats = SearchStats {
         depth,
         nodes: 1,
         ..SearchStats::default()
     };
-    let moves: Vec<Move> = ordered_legal_moves(board, preferred_pv.first().copied());
+    let root_key = board.zobrist_key;
+    let root_entry = if limits.use_transposition_table {
+        transposition_table.probe(root_key)
+    } else {
+        None
+    };
+    if root_entry.is_some() {
+        stats.tt_hits += 1;
+    }
+    let root_move = root_entry
+        .and_then(|entry| entry.best_move)
+        .or_else(|| preferred_pv.first().copied());
+    let moves: Vec<Move> = ordered_legal_moves(board, root_move);
     if moves.is_empty() {
         stats.elapsed_ms = start.elapsed().as_millis();
         return SearchResult {
@@ -767,6 +938,7 @@ fn search_at_depth(
             &mut stats,
             limits,
             deadline,
+            transposition_table,
         );
         board.unmake_move(undo);
         let Some(child_score) = child_score else {
@@ -791,6 +963,15 @@ fn search_at_depth(
         }
     }
 
+    if limits.use_transposition_table {
+        transposition_table.store(TranspositionEntry {
+            key: root_key,
+            depth,
+            score: score_to_table(best_score, 0),
+            bound: BoundType::Exact,
+            best_move: Some(best_move),
+        });
+    }
     stats.elapsed_ms = start.elapsed().as_millis();
     SearchResult {
         best_move: Some(best_move),
@@ -826,6 +1007,17 @@ mod tests {
 
         let moves: Vec<Move> = ordered_legal_moves(&mut board, None);
         assert_eq!(moves[0], Move::new(0, 0, 7, 0));
+    }
+
+    #[test]
+    fn test_move_ordering_prioritizes_transposition_move() {
+        let mut board = Board::new();
+        let preferred = board.generate_all_legal_moves().last().copied().unwrap();
+
+        assert_eq!(
+            ordered_legal_moves(&mut board, Some(preferred))[0],
+            preferred
+        );
     }
 
     #[test]
@@ -987,6 +1179,37 @@ mod tests {
     }
 
     #[test]
+    fn test_transposition_table_matches_disabled_search() {
+        let mut with_table_board = Board::new();
+        let with_table =
+            find_best_move_iterative_with_limits(&mut with_table_board, 4, SearchLimits::default());
+        let mut without_table_board = Board::new();
+        let without_table = find_best_move_iterative_with_limits(
+            &mut without_table_board,
+            4,
+            SearchLimits {
+                use_transposition_table: false,
+                ..SearchLimits::default()
+            },
+        );
+
+        assert_eq!(with_table.best_move, without_table.best_move);
+        assert_eq!(with_table.score, without_table.score);
+        assert!(with_table.stats.tt_hits > 0);
+        assert!(with_table.stats.tt_cutoffs > 0);
+        assert_eq!(with_table_board.to_fen(), without_table_board.to_fen());
+    }
+
+    #[test]
+    fn test_transposition_table_preserves_mate_distance_scores() {
+        for ply in [0, 1, 7, 42] {
+            for score in [MATE_SCORE - 9, -MATE_SCORE + 9, 123, -456] {
+                assert_eq!(score_from_table(score_to_table(score, ply), ply), score);
+            }
+        }
+    }
+
+    #[test]
     fn test_iterative_search_respects_zero_time_budget_between_iterations() {
         let mut board: Board = Board::new();
         let result = find_best_move_iterative_with_limits(
@@ -995,6 +1218,7 @@ mod tests {
             SearchLimits {
                 time_limit_ms: Some(0),
                 stop: None,
+                use_transposition_table: true,
             },
         );
 
@@ -1102,6 +1326,7 @@ mod tests {
             SearchLimits {
                 time_limit_ms: None,
                 stop: Some(stop),
+                use_transposition_table: true,
             },
         );
 

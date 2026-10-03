@@ -14,6 +14,8 @@ fn benchmark_search_make_unmake() {
         let mut nodes: u64 = 0;
         let mut quiescence_nodes: u64 = 0;
         let mut cutoffs: u64 = 0;
+        let mut tt_hits: u64 = 0;
+        let mut tt_cutoffs: u64 = 0;
 
         for _ in 0..iterations {
             let mut board: Board = Board::new();
@@ -24,6 +26,8 @@ fn benchmark_search_make_unmake() {
             nodes += result.stats.nodes;
             quiescence_nodes += result.stats.quiescence_nodes;
             cutoffs += result.stats.cutoffs;
+            tt_hits += result.stats.tt_hits;
+            tt_cutoffs += result.stats.tt_cutoffs;
             assert_eq!(board.to_fen(), Board::new().to_fen());
         }
 
@@ -34,8 +38,16 @@ fn benchmark_search_make_unmake() {
             (nodes as u128 * 1000) / elapsed_ms
         };
         println!(
-            "search depth {}: {} iterations, {} nodes ({} qnodes), {} cutoffs in {} ms ({} nps)",
-            depth, iterations, nodes, quiescence_nodes, cutoffs, elapsed_ms, nps
+            "search depth {}: {} iterations, {} nodes ({} qnodes), {} cutoffs, {} TT hits ({} TT cutoffs) in {} ms ({} nps)",
+            depth,
+            iterations,
+            nodes,
+            quiescence_nodes,
+            cutoffs,
+            tt_hits,
+            tt_cutoffs,
+            elapsed_ms,
+            nps
         );
     }
 }

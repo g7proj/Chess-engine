@@ -6,6 +6,7 @@ pub mod fen;
 pub mod helpers;
 pub mod piece;
 pub mod position;
+pub(crate) mod zobrist;
 
 pub use color::Color;
 pub use piece::Piece;
@@ -22,6 +23,7 @@ pub struct Board {
     pub history: HashMap<String, usize>,
     pub halfmove_clock: usize,
     pub fullmove_number: usize,
+    pub(crate) zobrist_key: u64,
 }
 
 impl Board {
@@ -55,7 +57,7 @@ impl Board {
                 RookBlack,
             ],
         ];
-        Board {
+        let mut board = Board {
             squares,
             side_to_move: Color::White,
             en_passant: None,
@@ -66,7 +68,15 @@ impl Board {
             history: HashMap::new(),
             halfmove_clock: 0,
             fullmove_number: 1,
-        }
+            zobrist_key: 0,
+        };
+        board.refresh_zobrist_key();
+        board
+    }
+
+    /// Returns the deterministic Zobrist key for the current position.
+    pub fn zobrist_key(&self) -> u64 {
+        self.calculate_zobrist_key()
     }
 }
 

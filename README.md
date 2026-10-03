@@ -176,11 +176,11 @@ cargo test --test search_bench -- --ignored --nocapture
 
 The benchmark checks that the search returns a move and restores the board after every iteration. It reports elapsed time for depths 3 and 4; it is ignored during normal test runs because timing-based tests are machine-dependent.
 
-UCI `go` searches progressively to the current fixed maximum depth and reports depth, score, nodes, quiescence nodes, NPS, elapsed time, cutoffs, and the principal variation.
+UCI `go` searches progressively to the current fixed maximum depth and reports depth, score, nodes, quiescence nodes, NPS, elapsed time, alpha-beta and transposition-table cutoffs/hits, and the principal variation.
 `go movetime <milliseconds>` limits iterative deepening between completed iterations. Search runs on a worker, so `stop` can be received while searching and returns the last completed iteration.
 
 ## Notes
 
 - Static evaluation combines material, pawn/knight piece-square bonuses, bishop pair, pseudo-legal mobility, center control, pawn structure, minor-piece development, and king shield/attack pressure. Scores are centipawns from the side-to-move perspective; evaluation weights are initial heuristics and need tuning against a position suite.
-- Current search is iterative-deepening alpha-beta/negamax with quiescence search and simple capture, promotion, check, and PV ordering.
+- Current search is iterative-deepening alpha-beta/negamax with quiescence search, a 65,536-slot Zobrist transposition table (enabled by default), and capture, promotion, check, PV, and transposition-move ordering. Rust callers can disable the table through `SearchLimits`.
 - FEN `fullmove number` handling is present, but should be revisited if game-state logic gets expanded.

@@ -42,6 +42,7 @@ pub struct Undo {
     pub(crate) previous_halfmove_clock: usize,
     pub(crate) previous_fullmove_number: usize,
     pub(crate) position_key: Option<String>,
+    pub(crate) previous_zobrist_key: u64,
 }
 
 impl Move {
