@@ -37,10 +37,13 @@ See [Plan 003](docs/plans/003-iterative-deepening.md) and [Plan 004](docs/plans/
 - [x] Add incremental Zobrist hashing and the existing transposition-table bound semantics to standalone bitboard search.
 - [x] Reuse killer/history heuristics in standalone bitboard move ordering and verify ordering behavior.
 - [x] Add iterative deepening, stop/deadline handling, principal variation, and complete `SearchStats` to standalone bitboard search.
-- [x] Compare standalone bitboard and mailbox search at matching depths across six positions, requiring equal move, PV, score, and search counters.
+- [x] Compare standalone bitboard and mailbox search at matching depths across ten positions, requiring equal move, PV, score, and search counters.
 - [x] Decide that measured gains justify staged production integration while retaining mailbox as a correctness oracle.
-- [x] Integrate bitboard search behind the reversible `bitboard-search` Cargo feature; keep mailbox as the default and test oracle.
-- [ ] Run release UCI match/performance validation and decide whether the bitboard feature should become the default.
+- [x] Integrate bitboard search behind the reversible `bitboard-search` Cargo feature, initially retaining mailbox as default and test oracle.
+- [x] Smoke-test both release UCI builds at the same position/depth and verify equal move, PV, score, and search counters.
+- [x] Extend the alternating release comparison and exact search-equivalence assertions to ten positions.
+- [x] Make bitboard search the Cargo default after equivalent-search, perft, full-suite, performance, and release UCI validation passed.
+- [ ] Run a longer paired UCI self-play/opening suite to evaluate playing strength and stability; mailbox remains selectable with `--no-default-features`.
 
 See [Plan 005](docs/plans/005-evaluation.md), [Plan 006](docs/plans/006-transposition-table.md), [Plan 007](docs/plans/007-bitboards.md), and [Plan 008](docs/plans/008-move-ordering.md).
 

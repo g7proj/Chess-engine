@@ -1953,6 +1953,26 @@ mod tests {
                 Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
                 3,
             ),
+            (
+                Board::from_fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")
+                    .unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1").unwrap(),
+                3,
+            ),
+            (
+                Board::from_fen(
+                    "rnbq1rk1/ppp2ppp/2n1pn2/2bp4/3P4/2N1PN2/PPP1BPPP/R1BQ1RK1 w - - 0 1",
+                )
+                .unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("4k3/8/8/8/8/2N5/8/4K3 w - - 0 1").unwrap(),
+                3,
+            ),
         ];
         for (board, depth) in positions {
             let mut mailbox = board.clone();
@@ -2151,6 +2171,30 @@ mod tests {
             (
                 "castling",
                 Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
+                3,
+            ),
+            (
+                "perft-position-4",
+                Board::from_fen("r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1")
+                    .unwrap(),
+                2,
+            ),
+            (
+                "en-passant",
+                Board::from_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1").unwrap(),
+                3,
+            ),
+            (
+                "opening",
+                Board::from_fen(
+                    "rnbq1rk1/ppp2ppp/2n1pn2/2bp4/3P4/2N1PN2/PPP1BPPP/R1BQ1RK1 w - - 0 1",
+                )
+                .unwrap(),
+                2,
+            ),
+            (
+                "minor-piece-endgame",
+                Board::from_fen("4k3/8/8/8/8/2N5/8/4K3 w - - 0 1").unwrap(),
                 3,
             ),
         ];

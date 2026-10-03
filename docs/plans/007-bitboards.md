@@ -25,10 +25,13 @@ Measure time spent in move generation, attack detection, make/unmake, and search
 - [x] Add incremental Zobrist hashing and the existing transposition-table bound semantics to standalone bitboard search.
 - [x] Reuse killer/history ordering in standalone bitboard search and test its move priority.
 - [x] Add iterative deepening, stop/deadline handling, principal variation, and complete `SearchStats` to standalone search.
-- [x] Compare standalone bitboard and mailbox search at matching depths across six positions, including moves, PV, scores, counters, and state restoration.
+- [x] Compare standalone bitboard and mailbox search at matching depths across ten positions, including moves, PV, scores, counters, and state restoration.
 - [x] Decide that measured gains justify staged production integration while retaining mailbox as a correctness oracle.
-- [x] Integrate bitboard search behind the reversible `bitboard-search` Cargo feature; keep mailbox as the default and test oracle.
-- [ ] Run release UCI match/performance validation and decide whether the bitboard feature should become the default.
+- [x] Integrate bitboard search behind the reversible `bitboard-search` Cargo feature, initially retaining mailbox as default and test oracle.
+- [x] Smoke-test both release UCI builds at the same position/depth and verify equal move, PV, score, and search counters.
+- [x] Extend the alternating release comparison and exact search-equivalence assertions to ten positions.
+- [x] Make bitboard search the Cargo default after equivalent-search, perft, full-suite, performance, and release UCI validation passed.
+- [ ] Run a longer paired UCI self-play/opening suite to evaluate playing strength and stability; mailbox remains selectable with `--no-default-features`.
 
 ## Profile Findings
 
@@ -70,7 +73,7 @@ Incremental Zobrist keys are part of the standalone bitboard state. Piece placem
 
 The standalone driver now performs iterative deepening, checks atomic stop and time deadlines throughout alpha-beta/quiescence, keeps the last completed iteration, builds a PV, and reports nodes, q-nodes, cutoffs, TT hits/cutoffs, elapsed time, and NPS using `SearchStats`. Tests cover populated stats, immediate stop, zero budget, a short deadline during a deep Kiwipete search, legal fallback, and state restoration.
 
-The six-position release suite uses the same depths on both paths: start d4, Kiwipete d3, endgame d4, middlegame d3, promotion d3, and castling d3. It alternates which path runs first and asserts identical best move, PV, score, node/q-node counts, cutoffs, TT hits/cutoffs, plus full position restoration. Two runs totaled 517-522 ms for standalone bitboards and 1,149-1,217 ms for mailbox (about 55% lower elapsed time). The bitboard search is now available to library callers and UCI via `--features bitboard-search`; the default remains mailbox. Full feature-enabled tests preserve UCI behavior and canonical perft. Keep mailbox as the test oracle while evaluating whether bitboards should become the default.
+The ten-position release suite uses matching depths across opening, middlegame, endgame, Kiwipete, perft, promotion, castling, and en-passant cases. It alternates which path runs first and asserts identical best move, PV, score, node/q-node counts, cutoffs, TT hits/cutoffs, plus full position restoration. Two runs totaled 622-623 ms for standalone bitboards and 1,366-1,371 ms for mailbox (about 54.5% lower elapsed time). Release UCI smoke tests at the start position and depth 3 also returned identical move, PV, score, and counters. This verifies protocol integration, not playing strength. After equivalent-search, perft, full-suite, performance, and UCI validation passed, bitboard became the default Cargo feature; `--no-default-features` selects mailbox for oracle comparisons. A longer paired UCI self-play/opening suite remains useful for evaluating playing strength and stability.
 
 ## Constraints
 
@@ -78,4 +81,4 @@ Do not replace the current representation without perft equivalence, make/unmake
 
 ## Completion
 
-The opt-in production path passes search equivalence and feature-enabled UCI/perft tests, and meets the local performance gate. Consider making it the default only after release UCI validation and additional position-suite results.
+The default bitboard production path passes search equivalence and UCI/perft tests, meets the local performance gate, and has passed release UCI smoke testing plus an expanded ten-position performance/equivalence suite. Mailbox remains available with `--no-default-features`; a longer paired UCI match suite is still needed to assess playing strength and stability.
