@@ -5,6 +5,11 @@ use crate::{
 
 impl Board {
     pub fn is_in_check(&self, color: Color) -> bool {
+        #[cfg(test)]
+        if let Some(bitboards) = &self.bitboard_shadow {
+            return bitboards.is_in_check(color);
+        }
+
         use Piece::*;
 
         // find king position

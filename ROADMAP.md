@@ -23,7 +23,18 @@ See [Plan 003](docs/plans/003-iterative-deepening.md) and [Plan 004](docs/plans/
 - [x] Complete evaluation improvements (material, positional tables, mobility, center, pawn structure, bishop pair, development, and king safety).
 - [x] Add Zobrist hashing and a transposition table.
 - [x] Revisit move ordering using transposition, killer, and history heuristics.
-- [ ] Evaluate a bitboard representation after profiling.
+- [x] Profile move generation, attack detection, make/unmake, and search; verify a test-only bitboard attack prototype.
+- [x] Prototype reversible incremental bitboard updates and verify perft equivalence for normal and special moves.
+- [x] Benchmark paired perft to measure bitboard-maintenance overhead.
+- [x] Compare mailbox and bitboard-legality alpha-beta prototypes for equivalent best move, score, nodes, and state restoration.
+- [x] Benchmark the bitboard search prototype across representative positions and verify equivalent scores, moves, and node counts.
+- [x] Compare bitboard legality against the complete production search path.
+- [x] Prototype bitboard-native piece placement, legal move generation, and attacks; compare canonical perft and full search.
+- [x] Make side-to-move, castling, and en-passant state self-contained in the bitboard prototype.
+- [x] Port static evaluation to the bitboard position and verify score equivalence.
+- [x] Optimize bitboard evaluation access and controls-square queries; verify exact scores and benchmark full search.
+- [x] Prototype standalone bitboard alpha-beta and quiescence search; verify scores and benchmark against mailbox search without TT.
+- [ ] Port Zobrist/TT, search heuristics, time control, and complete statistics to the standalone state; compare equivalent full searches before considering production integration.
 
 See [Plan 005](docs/plans/005-evaluation.md), [Plan 006](docs/plans/006-transposition-table.md), [Plan 007](docs/plans/007-bitboards.md), and [Plan 008](docs/plans/008-move-ordering.md).
 

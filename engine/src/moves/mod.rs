@@ -43,6 +43,8 @@ pub struct Undo {
     pub(crate) previous_fullmove_number: usize,
     pub(crate) position_key: Option<String>,
     pub(crate) previous_zobrist_key: u64,
+    #[cfg(test)]
+    pub(crate) bitboard_undo: Option<crate::board::bitboard_prototype::BitboardUndo>,
 }
 
 impl Move {
@@ -100,6 +102,13 @@ impl Board {
 
     /// Generates legal moves while applying and undoing moves on this board.
     pub(crate) fn generate_all_legal_moves_mut(&mut self) -> Vec<Move> {
+        #[cfg(test)]
+        if let Some(mut bitboards) = self.bitboard_shadow.take() {
+            let moves = bitboards.generate_legal_moves();
+            self.bitboard_shadow = Some(bitboards);
+            return moves;
+        }
+
         let all_moves: Vec<Move> = self.generate_pseudo_legal_moves();
         let color: Color = self.side_to_move;
 
@@ -114,7 +123,7 @@ impl Board {
             .collect()
     }
 
-    fn generate_pseudo_legal_moves(&self) -> Vec<Move> {
+    pub(crate) fn generate_pseudo_legal_moves(&self) -> Vec<Move> {
         use Piece::*;
         let mut all_moves: Vec<Move> = Vec::new();
 

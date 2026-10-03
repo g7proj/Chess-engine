@@ -176,6 +176,14 @@ cargo test --test search_bench -- --ignored --nocapture
 
 The benchmark checks that the search returns a move and restores the board after every iteration. It reports elapsed time for depths 3 and 4; it is ignored during normal test runs because timing-based tests are machine-dependent.
 
+The release-mode primitive profile and test-only bitboard attack comparison can be run with:
+
+```bash
+cargo test --release --lib benchmark_profile_engine_primitives -- --ignored --nocapture
+```
+
+This profile shows attack-query microbenchmarks only. Test-only bitboard-native move generation can be validated with `cargo test --lib test_bitboard_move_generation_matches_mailbox_perft_and_restores_state`; its mirrored perft benchmark is `cargo test --release --lib benchmark_incremental_bitboard_perft -- --ignored --nocapture`. The full-search mailbox/bitboard-shadow benchmark is `cargo test --release --lib benchmark_bitboard_search_prototype -- --ignored --nocapture`; the isolated evaluator benchmark is `cargo test --release --lib benchmark_bitboard_evaluation -- --ignored --nocapture`. A standalone test-only bitboard alpha-beta/quiescence search, with no TT or killer/history heuristics, is checked with `cargo test --lib test_standalone_bitboard_search_matches_mailbox_score_and_restores_state` and benchmarked using `cargo test --release --lib benchmark_standalone_bitboard_search -- --ignored --nocapture`. In the latest run it matched mailbox scores and took 5.5 ms (start depth 3), 24 ms (Kiwipete depth 2), and 1.9 ms (endgame depth 3), versus 8.0, 177, and 4.8 ms for mailbox search with TT disabled. These are machine-dependent prototype measurements; production remains unchanged and the standalone search does not yet include the complete search stack.
+
 UCI `go` searches progressively to the current fixed maximum depth and reports depth, score, nodes, quiescence nodes, NPS, elapsed time, alpha-beta and transposition-table cutoffs/hits, and the principal variation.
 `go movetime <milliseconds>` limits iterative deepening between completed iterations. Search runs on a worker, so `stop` can be received while searching and returns the last completed iteration.
 

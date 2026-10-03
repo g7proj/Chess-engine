@@ -17,6 +17,12 @@ impl Board {
         use crate::moves::Promotion;
         use Piece::*;
 
+        #[cfg(test)]
+        let bitboard_undo = self
+            .bitboard_shadow
+            .as_mut()
+            .map(|bitboards| bitboards.make_move(mv));
+
         let fr: usize = mv.from_rank;
         let ff: usize = mv.from_file;
         let tr: usize = mv.to_rank;
@@ -278,6 +284,8 @@ impl Board {
             previous_fullmove_number,
             position_key,
             previous_zobrist_key,
+            #[cfg(test)]
+            bitboard_undo,
         }
     }
 
@@ -314,6 +322,12 @@ impl Board {
         self.halfmove_clock = undo.previous_halfmove_clock;
         self.fullmove_number = undo.previous_fullmove_number;
         self.zobrist_key = undo.previous_zobrist_key;
+        #[cfg(test)]
+        if let (Some(bitboards), Some(bitboard_undo)) =
+            (self.bitboard_shadow.as_mut(), undo.bitboard_undo)
+        {
+            bitboards.unmake_move(bitboard_undo);
+        }
     }
 }
 

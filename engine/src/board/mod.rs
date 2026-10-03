@@ -1,6 +1,8 @@
 use crate::constants::{FILES, RANKS};
 use std::collections::HashMap;
 
+#[cfg(test)]
+pub(crate) mod bitboard_prototype;
 pub mod color;
 pub mod fen;
 pub mod helpers;
@@ -24,6 +26,8 @@ pub struct Board {
     pub halfmove_clock: usize,
     pub fullmove_number: usize,
     pub(crate) zobrist_key: u64,
+    #[cfg(test)]
+    pub(crate) bitboard_shadow: Option<bitboard_prototype::BitboardPosition>,
 }
 
 impl Board {
@@ -69,6 +73,8 @@ impl Board {
             halfmove_clock: 0,
             fullmove_number: 1,
             zobrist_key: 0,
+            #[cfg(test)]
+            bitboard_shadow: None,
         };
         board.refresh_zobrist_key();
         board

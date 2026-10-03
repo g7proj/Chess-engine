@@ -203,15 +203,54 @@ fn piece_value(piece: Piece) -> i32 {
     }
 }
 
+trait EvaluationPosition {
+    fn piece_at(&self, rank: usize, file: usize) -> Piece;
+    fn side_to_move(&self) -> Color;
+    fn controls_square(&self, target_rank: usize, target_file: usize, color: Color) -> bool {
+        (0..8).any(|rank| {
+            (0..8).any(|file| {
+                let piece = self.piece_at(rank, file);
+                piece.color() == Some(color)
+                    && piece_controls_square(self, piece, rank, file, target_rank, target_file)
+            })
+        })
+    }
+}
+
+impl EvaluationPosition for Board {
+    fn piece_at(&self, rank: usize, file: usize) -> Piece {
+        self.squares[rank][file]
+    }
+
+    fn side_to_move(&self) -> Color {
+        self.side_to_move
+    }
+}
+
+#[cfg(test)]
+impl EvaluationPosition for crate::board::bitboard_prototype::BitboardPosition {
+    fn piece_at(&self, rank: usize, file: usize) -> Piece {
+        self.piece_on(rank, file)
+    }
+
+    fn side_to_move(&self) -> Color {
+        self.active_color()
+    }
+
+    fn controls_square(&self, target_rank: usize, target_file: usize, color: Color) -> bool {
+        self.evaluation_controls_square(target_rank, target_file, color)
+    }
+}
+
 /// Returns material and piece-square scores from the side-to-move perspective.
 /// Positive values favor the side to move; negative values favor its opponent.
-fn evaluate_position(board: &Board) -> i32 {
+fn evaluate_position<P: EvaluationPosition>(board: &P) -> i32 {
     let mut white_score: i32 = 0;
     let mut white_bishops: usize = 0;
     let mut black_bishops: usize = 0;
     for rank in 0..8 {
         for file in 0..8 {
-            let piece: Piece = board.squares[rank][file];
+            let piece: Piece = board.piece_at(rank, file);
             match piece {
                 Piece::BishopWhite => white_bishops += 1,
                 Piece::BishopBlack => black_bishops += 1,
@@ -247,19 +286,27 @@ fn evaluate_position(board: &Board) -> i32 {
                 + development_score(board, color)
                 + king_safety_score(board, color));
     }
-    if board.side_to_move == Color::White {
+    if board.side_to_move() == Color::White {
         white_score
     } else {
         -white_score
     }
 }
 
+fn evaluate_search_position(board: &Board) -> i32 {
+    #[cfg(test)]
+    if let Some(bitboards) = &board.bitboard_shadow {
+        return evaluate_position(bitboards);
+    }
+    evaluate_position(board)
+}
+
 /// Scores pseudo-legal mobility for non-pawn pieces in centipawns.
-fn mobility_score(board: &Board, color: Color) -> i32 {
+fn mobility_score<P: EvaluationPosition>(board: &P, color: Color) -> i32 {
     let mut mobility: i32 = 0;
     for rank in 0..8 {
         for file in 0..8 {
-            let piece: Piece = board.squares[rank][file];
+            let piece: Piece = board.piece_at(rank, file);
             if piece.color() != Some(color) || matches!(piece, Piece::PawnWhite | Piece::PawnBlack)
             {
                 continue;
@@ -271,7 +318,13 @@ fn mobility_score(board: &Board, color: Color) -> i32 {
 }
 
 /// Counts reachable non-friendly squares for one piece.
-fn piece_mobility(board: &Board, piece: Piece, rank: usize, file: usize, color: Color) -> i32 {
+fn piece_mobility<P: EvaluationPosition>(
+    board: &P,
+    piece: Piece,
+    rank: usize,
+    file: usize,
+    color: Color,
+) -> i32 {
     match piece {
         Piece::KnightWhite | Piece::KnightBlack => count_jump_targets(
             board,
@@ -340,7 +393,7 @@ fn piece_mobility(board: &Board, piece: Piece, rank: usize, file: usize, color: 
 }
 
 fn count_jump_targets(
-    board: &Board,
+    board: &impl EvaluationPosition,
     rank: usize,
     file: usize,
     offsets: &[(isize, isize)],
@@ -355,13 +408,13 @@ fn count_jump_targets(
                 .then_some((target_rank as usize, target_file as usize))
         })
         .filter(|&(target_rank, target_file)| {
-            board.squares[target_rank][target_file].color() != Some(color)
+            board.piece_at(target_rank, target_file).color() != Some(color)
         })
         .count() as i32
 }
 
 fn count_ray_targets(
-    board: &Board,
+    board: &impl EvaluationPosition,
     rank: usize,
     file: usize,
     directions: &[(isize, isize)],
@@ -372,7 +425,7 @@ fn count_ray_targets(
         let mut target_rank = rank as isize + dr;
         let mut target_file = file as isize + df;
         while (0..8).contains(&target_rank) && (0..8).contains(&target_file) {
-            let target = board.squares[target_rank as usize][target_file as usize];
+            let target = board.piece_at(target_rank as usize, target_file as usize);
             if target.color() == Some(color) {
                 break;
             }
@@ -388,7 +441,7 @@ fn count_ray_targets(
 }
 
 /// Scores attacks on the four central squares in centipawns.
-fn center_control_score(board: &Board, color: Color) -> i32 {
+fn center_control_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     [(3, 3), (3, 4), (4, 3), (4, 4)]
         .into_iter()
         .filter(|&(rank, file)| square_controlled_by(board, rank, file, color))
@@ -397,11 +450,12 @@ fn center_control_score(board: &Board, color: Color) -> i32 {
 }
 
 /// Scores doubled, isolated, and passed pawns for one side.
-fn pawn_structure_score(board: &Board, color: Color) -> i32 {
+fn pawn_structure_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     let mut files = [0_usize; 8];
     let mut pawns = Vec::new();
-    for (rank, row) in board.squares.iter().enumerate() {
-        for (file, &piece) in row.iter().enumerate() {
+    for rank in 0..8 {
+        for file in 0..8 {
+            let piece = board.piece_at(rank, file);
             if piece.color() == Some(color) && matches!(piece, Piece::PawnWhite | Piece::PawnBlack)
             {
                 files[file] += 1;
@@ -430,9 +484,9 @@ fn pawn_structure_score(board: &Board, color: Color) -> i32 {
             let end_file = (file + 1).min(7);
             (start_file..=end_file).all(|enemy_file| {
                 !matches!(
-                    board.squares[enemy_rank][enemy_file],
+                    board.piece_at(enemy_rank, enemy_file),
                     Piece::PawnWhite | Piece::PawnBlack
-                ) || board.squares[enemy_rank][enemy_file].color() == Some(color)
+                ) || board.piece_at(enemy_rank, enemy_file).color() == Some(color)
             })
         });
         if passed {
@@ -448,14 +502,12 @@ fn pawn_structure_score(board: &Board, color: Color) -> i32 {
 }
 
 /// Rewards knights and bishops developed off their home rank.
-fn development_score(board: &Board, color: Color) -> i32 {
+fn development_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     let home_rank = if color == Color::White { 0 } else { 7 };
-    board
-        .squares
-        .iter()
-        .enumerate()
-        .flat_map(|(rank, squares)| squares.iter().map(move |&piece| (rank, piece)))
-        .filter(|&(rank, piece)| {
+    (0..8)
+        .flat_map(|rank| (0..8).map(move |file| (rank, file)))
+        .filter(|&(rank, file)| {
+            let piece = board.piece_at(rank, file);
             piece.color() == Some(color)
                 && matches!(
                     piece,
@@ -471,15 +523,15 @@ fn development_score(board: &Board, color: Color) -> i32 {
 }
 
 /// Scores pawn cover and enemy attacks around a side's king.
-fn king_safety_score(board: &Board, color: Color) -> i32 {
+fn king_safety_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     let king = if color == Color::White {
         Piece::KingWhite
     } else {
         Piece::KingBlack
     };
-    let Some((rank, file)) = board.squares.iter().enumerate().find_map(|(rank, row)| {
-        row.iter()
-            .position(|&piece| piece == king)
+    let Some((rank, file)) = (0..8).find_map(|rank| {
+        (0..8)
+            .find(|&file| board.piece_at(rank, file) == king)
             .map(|file| (rank, file))
     }) else {
         return 0;
@@ -493,9 +545,9 @@ fn king_safety_score(board: &Board, color: Color) -> i32 {
     let shield = if forward_rank < 8 {
         (file.saturating_sub(1)..=(file + 1).min(7))
             .filter(|&shield_file| {
-                board.squares[forward_rank][shield_file].color() == Some(color)
+                board.piece_at(forward_rank, shield_file).color() == Some(color)
                     && matches!(
-                        board.squares[forward_rank][shield_file],
+                        board.piece_at(forward_rank, shield_file),
                         Piece::PawnWhite | Piece::PawnBlack
                     )
             })
@@ -519,9 +571,17 @@ fn king_safety_score(board: &Board, color: Color) -> i32 {
     shield - pressure
 }
 
-/// Returns whether a piece attacks a target square along its movement pattern.
-fn piece_controls_square(
-    board: &Board,
+fn square_controlled_by(
+    board: &impl EvaluationPosition,
+    target_rank: usize,
+    target_file: usize,
+    color: Color,
+) -> bool {
+    board.controls_square(target_rank, target_file, color)
+}
+
+fn piece_controls_square<P: EvaluationPosition + ?Sized>(
+    board: &P,
     piece: Piece,
     rank: usize,
     file: usize,
@@ -556,33 +616,16 @@ fn piece_controls_square(
         return true;
     }
 
-    let step_rank = dr.signum();
-    let step_file = df.signum();
-    let mut current_rank = rank as isize + step_rank;
-    let mut current_file = file as isize + step_file;
+    let mut current_rank = rank as isize + dr.signum();
+    let mut current_file = file as isize + df.signum();
     while (current_rank, current_file) != (target_rank as isize, target_file as isize) {
-        if board.squares[current_rank as usize][current_file as usize] != Piece::Empty {
+        if board.piece_at(current_rank as usize, current_file as usize) != Piece::Empty {
             return false;
         }
-        current_rank += step_rank;
-        current_file += step_file;
+        current_rank += dr.signum();
+        current_file += df.signum();
     }
     true
-}
-
-fn square_controlled_by(
-    board: &Board,
-    target_rank: usize,
-    target_file: usize,
-    color: Color,
-) -> bool {
-    (0..8).any(|rank| {
-        (0..8).any(|file| {
-            let piece = board.squares[rank][file];
-            piece.color() == Some(color)
-                && piece_controls_square(board, piece, rank, file, target_rank, target_file)
-        })
-    })
 }
 
 /// Returns the material bonus assigned to a promotion move.
@@ -844,10 +887,10 @@ fn quiescence_search(
 
     let in_check: bool = board.is_in_check(board.side_to_move);
     if ply >= MAX_QUIESCENCE_PLY {
-        return Some(evaluate_position(board));
+        return Some(evaluate_search_position(board));
     }
     if !in_check {
-        let stand_pat: i32 = evaluate_position(board);
+        let stand_pat: i32 = evaluate_search_position(board);
         if stand_pat >= beta {
             stats.cutoffs += 1;
             return Some(beta);
@@ -891,6 +934,132 @@ fn search_should_stop(limits: &SearchLimits, deadline: Option<Instant>) -> bool 
         .as_ref()
         .is_some_and(|flag| flag.load(Ordering::Relaxed))
         || deadline.is_some_and(|limit| Instant::now() >= limit)
+}
+
+#[cfg(test)]
+fn bitboard_search(
+    position: &mut crate::board::bitboard_prototype::BitboardPosition,
+    depth: usize,
+) -> (Option<Move>, i32) {
+    let mut nodes = 0;
+    let mut best_move = None;
+    let mut best_score = i32::MIN;
+    let mut alpha = i32::MIN + 1;
+    for mv in bitboard_ordered_moves(position, None) {
+        let undo = position.make_move(mv);
+        let score = -bitboard_negamax(
+            position,
+            depth.saturating_sub(1),
+            -i32::MAX,
+            -alpha,
+            1,
+            &mut nodes,
+        );
+        position.unmake_move(undo);
+        if score > best_score {
+            best_score = score;
+            best_move = Some(mv);
+        }
+        alpha = alpha.max(score);
+    }
+    (best_move, if best_move.is_some() { best_score } else { 0 })
+}
+
+#[cfg(test)]
+fn bitboard_negamax(
+    position: &mut crate::board::bitboard_prototype::BitboardPosition,
+    depth: usize,
+    mut alpha: i32,
+    beta: i32,
+    ply: usize,
+    nodes: &mut u64,
+) -> i32 {
+    *nodes += 1;
+    if depth == 0 {
+        return bitboard_quiescence(position, alpha, beta, ply, nodes);
+    }
+    let moves = bitboard_ordered_moves(position, None);
+    if moves.is_empty() {
+        return if position.is_in_check(position.active_color()) {
+            -MATE_SCORE + ply as i32
+        } else {
+            0
+        };
+    }
+    for mv in moves {
+        let undo = position.make_move(mv);
+        let score = -bitboard_negamax(position, depth - 1, -beta, -alpha, ply + 1, nodes);
+        position.unmake_move(undo);
+        if score >= beta {
+            return beta;
+        }
+        alpha = alpha.max(score);
+    }
+    alpha
+}
+
+#[cfg(test)]
+fn bitboard_quiescence(
+    position: &mut crate::board::bitboard_prototype::BitboardPosition,
+    mut alpha: i32,
+    beta: i32,
+    ply: usize,
+    nodes: &mut u64,
+) -> i32 {
+    *nodes += 1;
+    let in_check = position.is_in_check(position.active_color());
+    if ply >= MAX_QUIESCENCE_PLY {
+        return evaluate_position(position);
+    }
+    if !in_check {
+        let stand_pat = evaluate_position(position);
+        if stand_pat >= beta {
+            return beta;
+        }
+        alpha = alpha.max(stand_pat);
+    }
+    let moves = bitboard_ordered_moves(position, None);
+    let mut found_evasion = false;
+    for mv in moves {
+        if !in_check && !position.is_capture(mv) && mv.promotion == Promotion::None {
+            continue;
+        }
+        found_evasion = true;
+        let undo = position.make_move(mv);
+        let score = -bitboard_quiescence(position, -beta, -alpha, ply + 1, nodes);
+        position.unmake_move(undo);
+        if score >= beta {
+            return beta;
+        }
+        alpha = alpha.max(score);
+    }
+    if in_check && !found_evasion {
+        -MATE_SCORE + ply as i32
+    } else {
+        alpha
+    }
+}
+
+#[cfg(test)]
+fn bitboard_ordered_moves(
+    position: &mut crate::board::bitboard_prototype::BitboardPosition,
+    preferred: Option<Move>,
+) -> Vec<Move> {
+    let mut moves = position.generate_legal_moves();
+    moves.sort_by_key(|mv| {
+        let victim = position.piece_on(mv.to_rank, mv.to_file);
+        let attacker = position.piece_on(mv.from_rank, mv.from_file);
+        Reverse(
+            i32::from(Some(*mv) == preferred) * 20_000
+                + if position.is_capture(*mv) {
+                    10_000 + piece_value(victim).abs() - piece_value(attacker).abs() / 10
+                } else {
+                    0
+                }
+                + move_promotion_bonus(mv.promotion) * 10,
+        )
+    });
+    moves
 }
 
 /// Finds the move with the highest evaluated score for the side to move.
@@ -949,7 +1118,7 @@ pub fn find_best_move_iterative_with_limits(
     let mut result: SearchResult = SearchResult {
         best_move: fallback,
         pv: fallback.into_iter().collect(),
-        score: evaluate_position(board),
+        score: evaluate_search_position(board),
         stats: SearchStats::default(),
     };
     for depth in 1..=max_depth {
@@ -1088,6 +1257,7 @@ fn search_at_depth(
 mod tests {
     use super::*;
     use crate::board::Color;
+    use std::time::Instant;
 
     fn empty_board() -> Board {
         let mut board: Board = Board::new();
@@ -1160,6 +1330,86 @@ mod tests {
         let from = mv.from_rank * 8 + mv.from_file;
         let to = mv.to_rank * 8 + mv.to_file;
         assert_eq!(heuristics.history[0][from][to], 12);
+    }
+
+    #[test]
+    #[ignore]
+    fn benchmark_profile_engine_primitives() {
+        use std::hint::black_box;
+
+        let mut board = Board::new();
+        let generation_start = Instant::now();
+        let mut generated_moves = 0;
+        for _ in 0..3_000 {
+            generated_moves += board.generate_all_legal_moves_mut().len();
+        }
+        let generation_elapsed = generation_start.elapsed();
+
+        let attack_start = Instant::now();
+        let mut attacked_squares = 0;
+        for _ in 0..2_000 {
+            for color in [Color::White, Color::Black] {
+                for rank in 0..8 {
+                    for file in 0..8 {
+                        attacked_squares +=
+                            black_box(board.is_square_under_attack(rank, file, color) as usize);
+                    }
+                }
+            }
+        }
+        let attack_elapsed = attack_start.elapsed();
+
+        let conversion_start = Instant::now();
+        let bitboards = crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+        let conversion_elapsed = conversion_start.elapsed();
+        let bitboard_attack_start = Instant::now();
+        let mut bitboard_attacked_squares = 0;
+        for _ in 0..2_000 {
+            for color in [Color::White, Color::Black] {
+                for rank in 0..8 {
+                    for file in 0..8 {
+                        bitboard_attacked_squares +=
+                            black_box(bitboards.is_square_attacked(rank, file, color) as usize);
+                    }
+                }
+            }
+        }
+        let bitboard_attack_elapsed = bitboard_attack_start.elapsed();
+        assert_eq!(bitboard_attacked_squares, attacked_squares);
+
+        let legal_moves = board.generate_all_legal_moves();
+        let make_unmake_start = Instant::now();
+        for _ in 0..3_000 {
+            for &mv in &legal_moves {
+                let undo = board.make_move_for_search(mv);
+                board.unmake_move(undo);
+            }
+        }
+        let make_unmake_elapsed = make_unmake_start.elapsed();
+
+        let search_start = Instant::now();
+        let mut searched_nodes = 0;
+        for _ in 0..5 {
+            let result = find_best_move_with_stats(&mut board, 4);
+            searched_nodes += result.stats.nodes;
+        }
+        let search_elapsed = search_start.elapsed();
+
+        println!(
+            "profile move generation: 3000 positions, {generated_moves} legal moves, {generation_elapsed:?}"
+        );
+        println!(
+            "profile attack detection: 256000 square/color queries, {attacked_squares} attacked, {attack_elapsed:?}"
+        );
+        println!(
+            "profile bitboard prototype: conversion {conversion_elapsed:?}, same queries {bitboard_attack_elapsed:?}"
+        );
+        println!(
+            "profile make/unmake: {} move pairs, {make_unmake_elapsed:?}",
+            3_000 * legal_moves.len()
+        );
+        println!("profile search: 5 x depth 4, {searched_nodes} nodes, {search_elapsed:?}");
+        assert_eq!(board.to_fen(), Board::new().to_fen());
     }
 
     #[test]
@@ -1285,6 +1535,150 @@ mod tests {
     }
 
     #[test]
+    fn test_bitboard_evaluation_matches_mailbox() {
+        let positions = [
+            Board::new(),
+            Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
+                .unwrap(),
+            Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+            Board::from_fen("4k3/8/8/3pP3/8/8/8/4K3 b - d6 0 1").unwrap(),
+        ];
+        for board in positions {
+            let bitboards = crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+            assert_eq!(
+                evaluate_position(&bitboards),
+                evaluate_position(&board),
+                "evaluation mismatch for {}",
+                board.to_fen()
+            );
+        }
+    }
+
+    #[test]
+    fn test_standalone_bitboard_search_matches_mailbox_score_and_restores_state() {
+        let positions = [
+            (Board::new(), 3),
+            (
+                Board::from_fen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                )
+                .unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+                3,
+            ),
+        ];
+        for (board, depth) in positions {
+            let fen = board.to_fen();
+            let mut mailbox = board.clone();
+            let reference = find_best_move_iterative_with_limits(
+                &mut mailbox,
+                depth,
+                SearchLimits {
+                    use_transposition_table: false,
+                    ..SearchLimits::default()
+                },
+            );
+            let mut bitboards =
+                crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+            let (best_move, score) = bitboard_search(&mut bitboards, depth);
+            assert_eq!(score, reference.score, "score mismatch: {fen}");
+            assert!(best_move.is_some_and(|mv| board.generate_all_legal_moves().contains(&mv)));
+            assert_eq!(
+                bitboards,
+                crate::board::bitboard_prototype::BitboardPosition::from_board(&board)
+            );
+            assert_eq!(mailbox.to_fen(), fen);
+        }
+    }
+
+    #[test]
+    #[ignore = "timing depends on the machine"]
+    fn benchmark_standalone_bitboard_search() {
+        let positions = [
+            ("start", Board::new(), 3),
+            (
+                "kiwipete",
+                Board::from_fen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                )
+                .unwrap(),
+                2,
+            ),
+            (
+                "endgame",
+                Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+                3,
+            ),
+        ];
+        for (name, board, depth) in positions {
+            let mut standalone =
+                crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+            let start = Instant::now();
+            let (bitboard_move, bitboard_score) = bitboard_search(&mut standalone, depth);
+            let bitboard_elapsed = start.elapsed();
+
+            let mut mailbox = board.clone();
+            let start = Instant::now();
+            let mailbox_result = find_best_move_iterative_with_limits(
+                &mut mailbox,
+                depth,
+                SearchLimits {
+                    use_transposition_table: false,
+                    ..SearchLimits::default()
+                },
+            );
+            let mailbox_elapsed = start.elapsed();
+            assert_eq!(bitboard_score, mailbox_result.score, "{name}");
+            println!(
+                "{name} depth {depth}: standalone-bitboard={bitboard_elapsed:?}, mailbox-no-TT={mailbox_elapsed:?}, score={bitboard_score}, move={bitboard_move:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "timing depends on the machine"]
+    fn benchmark_bitboard_evaluation() {
+        let positions = [
+            Board::new(),
+            Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
+                .unwrap(),
+            Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+            Board::from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1").unwrap(),
+        ];
+        let bitboards: Vec<_> = positions
+            .iter()
+            .map(crate::board::bitboard_prototype::BitboardPosition::from_board)
+            .collect();
+        let iterations = 10_000;
+
+        let start = Instant::now();
+        let mut mailbox_sum = 0;
+        for _ in 0..iterations {
+            for board in &positions {
+                mailbox_sum += std::hint::black_box(evaluate_position(board));
+            }
+        }
+        let mailbox_elapsed = start.elapsed();
+
+        let start = Instant::now();
+        let mut bitboard_sum = 0;
+        for _ in 0..iterations {
+            for board in &bitboards {
+                bitboard_sum += std::hint::black_box(evaluate_position(board));
+            }
+        }
+        let bitboard_elapsed = start.elapsed();
+
+        assert_eq!(bitboard_sum, mailbox_sum);
+        println!(
+            "40,000 evaluations: mailbox={mailbox_elapsed:?}, bitboard={bitboard_elapsed:?}, checksum={mailbox_sum}"
+        );
+    }
+
+    #[test]
     fn test_search_restores_board_state() {
         let mut board: Board = Board::new();
         let fen_before: String = board.to_fen();
@@ -1306,6 +1700,203 @@ mod tests {
         assert!(result.stats.nodes > 1);
         assert!(result.stats.cutoffs > 0);
         assert!(result.stats.nps() > 0);
+    }
+
+    #[test]
+    fn test_full_search_matches_bitboard_shadow() {
+        let positions = [
+            (Board::new(), 3),
+            (
+                Board::from_fen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                )
+                .unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1").unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1").unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
+                2,
+            ),
+            (
+                Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+                2,
+            ),
+        ];
+        for (mut shadow_board, depth) in positions {
+            let fen_before = shadow_board.to_fen();
+            let mut mailbox = shadow_board.clone();
+            shadow_board.enable_bitboard_shadow();
+            let mailbox_result =
+                find_best_move_iterative_with_limits(&mut mailbox, depth, SearchLimits::default());
+            let shadow_result = find_best_move_iterative_with_limits(
+                &mut shadow_board,
+                depth,
+                SearchLimits::default(),
+            );
+
+            assert_eq!(
+                shadow_result.best_move, mailbox_result.best_move,
+                "move: {fen_before}"
+            );
+            assert_eq!(
+                shadow_result.score, mailbox_result.score,
+                "score: {fen_before}"
+            );
+            assert_eq!(shadow_result.pv, mailbox_result.pv, "PV: {fen_before}");
+            assert_eq!(
+                shadow_result.stats.nodes, mailbox_result.stats.nodes,
+                "nodes: {fen_before}"
+            );
+            assert_eq!(shadow_result.stats.cutoffs, mailbox_result.stats.cutoffs);
+            assert_eq!(
+                shadow_result.stats.quiescence_nodes,
+                mailbox_result.stats.quiescence_nodes
+            );
+            assert_eq!(shadow_result.stats.tt_hits, mailbox_result.stats.tt_hits);
+            assert_eq!(
+                shadow_result.stats.tt_cutoffs,
+                mailbox_result.stats.tt_cutoffs
+            );
+            assert_eq!(shadow_board.to_fen(), fen_before);
+            assert_eq!(mailbox.to_fen(), fen_before);
+            assert!(
+                shadow_board
+                    .bitboard_shadow
+                    .as_ref()
+                    .unwrap()
+                    .matches_board(&shadow_board)
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "timing depends on the machine"]
+    fn benchmark_bitboard_search_prototype() {
+        let positions = [
+            ("start", Board::new(), 4),
+            (
+                "kiwipete",
+                Board::from_fen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                )
+                .unwrap(),
+                3,
+            ),
+            (
+                "endgame",
+                Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+                4,
+            ),
+            (
+                "middlegame",
+                Board::from_fen(
+                    "r2q1rk1/ppp2ppp/2npbn2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 1",
+                )
+                .unwrap(),
+                3,
+            ),
+            (
+                "promotion",
+                Board::from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1").unwrap(),
+                3,
+            ),
+            (
+                "castling",
+                Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
+                3,
+            ),
+        ];
+        let mut mailbox_total = std::time::Duration::ZERO;
+        let mut bitboard_total = std::time::Duration::ZERO;
+        let mut total_nodes = 0;
+
+        for (index, (name, initial, depth)) in positions.into_iter().enumerate() {
+            let initial_fen = initial.to_fen();
+            let mut mailbox = initial.clone();
+            let mut shadow_board = initial;
+            shadow_board.enable_bitboard_shadow();
+            let run_mailbox = |board: &mut Board| {
+                let start = Instant::now();
+                let result =
+                    find_best_move_iterative_with_limits(board, depth, SearchLimits::default());
+                (result, start.elapsed())
+            };
+            let run_shadow = |board: &mut Board| {
+                let start = Instant::now();
+                let result =
+                    find_best_move_iterative_with_limits(board, depth, SearchLimits::default());
+                (result, start.elapsed())
+            };
+            let (mailbox_result, mailbox_elapsed, shadow_result, bitboard_elapsed) =
+                if index % 2 == 0 {
+                    let (mailbox_result, mailbox_elapsed) = run_mailbox(&mut mailbox);
+                    let (shadow_result, bitboard_elapsed) = run_shadow(&mut shadow_board);
+                    (
+                        mailbox_result,
+                        mailbox_elapsed,
+                        shadow_result,
+                        bitboard_elapsed,
+                    )
+                } else {
+                    let (shadow_result, bitboard_elapsed) = run_shadow(&mut shadow_board);
+                    let (mailbox_result, mailbox_elapsed) = run_mailbox(&mut mailbox);
+                    (
+                        mailbox_result,
+                        mailbox_elapsed,
+                        shadow_result,
+                        bitboard_elapsed,
+                    )
+                };
+
+            assert_eq!(
+                shadow_result.best_move, mailbox_result.best_move,
+                "move: {name}"
+            );
+            assert_eq!(shadow_result.score, mailbox_result.score, "score: {name}");
+            assert_eq!(shadow_result.pv, mailbox_result.pv, "PV: {name}");
+            assert_eq!(
+                shadow_result.stats.nodes, mailbox_result.stats.nodes,
+                "nodes: {name}"
+            );
+            assert_eq!(
+                shadow_result.stats.quiescence_nodes, mailbox_result.stats.quiescence_nodes,
+                "qnodes: {name}"
+            );
+            assert_eq!(shadow_result.stats.tt_hits, mailbox_result.stats.tt_hits);
+            assert_eq!(
+                shadow_result.stats.tt_cutoffs,
+                mailbox_result.stats.tt_cutoffs
+            );
+            assert_eq!(shadow_result.stats.cutoffs, mailbox_result.stats.cutoffs);
+            assert_eq!(mailbox.to_fen(), initial_fen);
+            assert_eq!(shadow_board.to_fen(), initial_fen);
+            assert!(
+                shadow_board
+                    .bitboard_shadow
+                    .as_ref()
+                    .unwrap()
+                    .matches_board(&shadow_board)
+            );
+            mailbox_total += mailbox_elapsed;
+            bitboard_total += bitboard_elapsed;
+            total_nodes += mailbox_result.stats.nodes;
+            println!(
+                "{name} depth {depth}: mailbox={mailbox_elapsed:?}, bitboard-shadow={bitboard_elapsed:?}, nodes={} score={}",
+                mailbox_result.stats.nodes, mailbox_result.score
+            );
+        }
+
+        println!(
+            "Suite total: mailbox={mailbox_total:?}, bitboard={bitboard_total:?}, nodes={total_nodes}"
+        );
     }
 
     #[test]
