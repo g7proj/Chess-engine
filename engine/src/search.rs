@@ -20,6 +20,8 @@ const KING_SHIELD_BONUS: i32 = 10;
 const KING_PRESSURE_PENALTY: i32 = 8;
 const TRANSPOSITION_TABLE_SIZE: usize = 1 << 16;
 const MATE_SCORE_THRESHOLD: i32 = MATE_SCORE - 1_000;
+const KILLER_MOVE_BONUS: i32 = 8_000;
+const HISTORY_SCORE_LIMIT: i32 = 2_000;
 const PAWN_POSITION_BONUS: [[i32; 8]; 8] = [
     [0, 0, 0, 0, 0, 0, 0, 0],
     [5, 10, 10, -20, -20, 10, 10, 5],
@@ -109,6 +111,60 @@ struct TranspositionEntry {
 
 struct TranspositionTable {
     entries: Vec<Option<TranspositionEntry>>,
+}
+
+struct SearchHeuristics {
+    killers: Vec<[Option<Move>; 2]>,
+    history: [[[i32; 64]; 64]; 2],
+}
+
+impl SearchHeuristics {
+    fn new(max_ply: usize) -> Self {
+        Self {
+            killers: vec![[None; 2]; max_ply.max(1)],
+            history: [[[0; 64]; 64]; 2],
+        }
+    }
+
+    fn record_quiet_cutoff(&mut self, mv: Move, color: Color, ply: usize, depth: usize) {
+        if let Some(killers) = self.killers.get_mut(ply)
+            && killers[0] != Some(mv)
+        {
+            killers[1] = killers[0];
+            killers[0] = Some(mv);
+        }
+        self.update_history(mv, color, depth as i32 * depth as i32);
+    }
+
+    fn penalize_quiet(&mut self, mv: Move, color: Color, depth: usize) {
+        self.update_history(mv, color, -(depth as i32 * depth as i32 / 2).max(1));
+    }
+
+    fn update_history(&mut self, mv: Move, color: Color, bonus: i32) {
+        let color_index = if color == Color::White { 0 } else { 1 };
+        let from = mv.from_rank * 8 + mv.from_file;
+        let to = mv.to_rank * 8 + mv.to_file;
+        let score = &mut self.history[color_index][from][to];
+        *score = (*score + bonus).clamp(-HISTORY_SCORE_LIMIT, HISTORY_SCORE_LIMIT);
+    }
+
+    fn quiet_move_bonus(&self, mv: &Move, color: Color, ply: usize) -> i32 {
+        if mv.promotion != Promotion::None {
+            return 0;
+        }
+        if let Some(killers) = self.killers.get(ply) {
+            if killers[0] == Some(*mv) {
+                return KILLER_MOVE_BONUS;
+            }
+            if killers[1] == Some(*mv) {
+                return KILLER_MOVE_BONUS - 500;
+            }
+        }
+        let color_index = if color == Color::White { 0 } else { 1 };
+        let from = mv.from_rank * 8 + mv.from_file;
+        let to = mv.to_rank * 8 + mv.to_file;
+        self.history[color_index][from][to]
+    }
 }
 
 impl TranspositionTable {
@@ -570,7 +626,12 @@ fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
 }
 
 /// Returns legal moves sorted by search priority.
-fn ordered_legal_moves(board: &mut Board, preferred_move: Option<Move>) -> Vec<Move> {
+fn ordered_legal_moves(
+    board: &mut Board,
+    preferred_move: Option<Move>,
+    heuristics: Option<&SearchHeuristics>,
+    ply: usize,
+) -> Vec<Move> {
     let mut moves: Vec<Move> = board.generate_all_legal_moves_mut();
     moves.sort_by_key(|mv| {
         let pv_bonus: i32 = if Some(*mv) == preferred_move {
@@ -578,7 +639,17 @@ fn ordered_legal_moves(board: &mut Board, preferred_move: Option<Move>) -> Vec<M
         } else {
             0
         };
-        Reverse(move_order_score(board, mv) + pv_bonus)
+        let moving_color = board.squares[mv.from_rank][mv.from_file]
+            .color()
+            .unwrap_or(board.side_to_move);
+        let quiet_bonus = if !is_capture(board, mv) {
+            heuristics.map_or(0, |ordering| {
+                ordering.quiet_move_bonus(mv, moving_color, ply)
+            })
+        } else {
+            0
+        };
+        Reverse(move_order_score(board, mv) + pv_bonus + quiet_bonus)
     });
     moves
 }
@@ -604,6 +675,7 @@ fn negamax_alpha_beta(
     limits: &SearchLimits,
     deadline: Option<Instant>,
     transposition_table: &mut TranspositionTable,
+    heuristics: &mut SearchHeuristics,
 ) -> Option<i32> {
     pv_table[ply].clear();
     if search_should_stop(limits, deadline) {
@@ -646,8 +718,12 @@ fn negamax_alpha_beta(
         }
     }
 
-    let moves: Vec<Move> =
-        ordered_legal_moves(board, tt_move.or_else(|| preferred_pv.get(ply).copied()));
+    let moves: Vec<Move> = ordered_legal_moves(
+        board,
+        tt_move.or_else(|| preferred_pv.get(ply).copied()),
+        Some(heuristics),
+        ply,
+    );
     if moves.is_empty() {
         if board.is_in_check(board.side_to_move) {
             return Some(-MATE_SCORE + ply as i32);
@@ -655,7 +731,10 @@ fn negamax_alpha_beta(
         return Some(0);
     }
 
+    let moving_color = board.side_to_move;
+    let mut searched_quiet_moves = Vec::new();
     for mv in moves {
+        let is_quiet = !is_capture(board, &mv) && mv.promotion == Promotion::None;
         let undo: crate::moves::Undo = board.make_move_for_search(mv);
         let child_score: Option<i32> = negamax_alpha_beta(
             board,
@@ -669,11 +748,18 @@ fn negamax_alpha_beta(
             limits,
             deadline,
             transposition_table,
+            heuristics,
         );
         board.unmake_move(undo);
         let score: i32 = -child_score?;
         if score >= beta {
             stats.cutoffs += 1;
+            if is_quiet {
+                heuristics.record_quiet_cutoff(mv, moving_color, ply, depth);
+                for previous in searched_quiet_moves {
+                    heuristics.penalize_quiet(previous, moving_color, depth);
+                }
+            }
             let child_pv: Vec<Move> = pv_table[ply + 1].clone();
             pv_table[ply] = vec![mv];
             pv_table[ply].extend(child_pv);
@@ -693,6 +779,9 @@ fn negamax_alpha_beta(
             let child_pv: Vec<Move> = pv_table[ply + 1].clone();
             pv_table[ply] = vec![mv];
             pv_table[ply].extend(child_pv);
+        }
+        if is_quiet {
+            searched_quiet_moves.push(mv);
         }
     }
 
@@ -766,7 +855,7 @@ fn quiescence_search(
         alpha = alpha.max(stand_pat);
     }
 
-    let moves: Vec<Move> = ordered_legal_moves(board, None)
+    let moves: Vec<Move> = ordered_legal_moves(board, None, None, ply)
         .into_iter()
         .filter(|mv| in_check || is_capture(board, mv) || mv.promotion != Promotion::None)
         .collect();
@@ -815,6 +904,7 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
 /// Searches for the best move and returns metrics for the completed search.
 pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResult {
     let mut transposition_table = TranspositionTable::new(true);
+    let mut heuristics = SearchHeuristics::new(depth + 2);
     search_at_depth(
         board,
         depth,
@@ -822,6 +912,7 @@ pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResul
         &SearchLimits::default(),
         None,
         &mut transposition_table,
+        &mut heuristics,
     )
 }
 
@@ -837,12 +928,21 @@ pub fn find_best_move_iterative_with_limits(
     limits: SearchLimits,
 ) -> SearchResult {
     let mut transposition_table = TranspositionTable::new(limits.use_transposition_table);
+    let mut heuristics = SearchHeuristics::new(max_depth + 2);
     let search_start: Instant = Instant::now();
     let deadline: Option<Instant> = limits
         .time_limit_ms
         .map(|ms| search_start + std::time::Duration::from_millis(ms.min(u64::MAX as u128) as u64));
     if max_depth == 0 {
-        return search_at_depth(board, 0, &[], &limits, deadline, &mut transposition_table);
+        return search_at_depth(
+            board,
+            0,
+            &[],
+            &limits,
+            deadline,
+            &mut transposition_table,
+            &mut heuristics,
+        );
     }
 
     let fallback: Option<Move> = board.generate_all_legal_moves().first().copied();
@@ -871,6 +971,7 @@ pub fn find_best_move_iterative_with_limits(
             &limits,
             deadline,
             &mut transposition_table,
+            &mut heuristics,
         );
         if next.stats.depth == depth && next.best_move.is_some() {
             result = next;
@@ -888,6 +989,7 @@ fn search_at_depth(
     limits: &SearchLimits,
     deadline: Option<Instant>,
     transposition_table: &mut TranspositionTable,
+    heuristics: &mut SearchHeuristics,
 ) -> SearchResult {
     board.refresh_zobrist_key();
     let start: Instant = Instant::now();
@@ -908,7 +1010,7 @@ fn search_at_depth(
     let root_move = root_entry
         .and_then(|entry| entry.best_move)
         .or_else(|| preferred_pv.first().copied());
-    let moves: Vec<Move> = ordered_legal_moves(board, root_move);
+    let moves: Vec<Move> = ordered_legal_moves(board, root_move, Some(heuristics), 0);
     if moves.is_empty() {
         stats.elapsed_ms = start.elapsed().as_millis();
         return SearchResult {
@@ -939,6 +1041,7 @@ fn search_at_depth(
             limits,
             deadline,
             transposition_table,
+            heuristics,
         );
         board.unmake_move(undo);
         let Some(child_score) = child_score else {
@@ -1005,7 +1108,7 @@ mod tests {
         board.squares[7][0] = Piece::QueenBlack;
         board.side_to_move = Color::White;
 
-        let moves: Vec<Move> = ordered_legal_moves(&mut board, None);
+        let moves: Vec<Move> = ordered_legal_moves(&mut board, None, None, 0);
         assert_eq!(moves[0], Move::new(0, 0, 7, 0));
     }
 
@@ -1015,9 +1118,48 @@ mod tests {
         let preferred = board.generate_all_legal_moves().last().copied().unwrap();
 
         assert_eq!(
-            ordered_legal_moves(&mut board, Some(preferred))[0],
+            ordered_legal_moves(&mut board, Some(preferred), None, 0)[0],
             preferred
         );
+    }
+
+    #[test]
+    fn test_killer_and_history_heuristics_prioritize_quiet_moves() {
+        let mut board = Board::new();
+        let first_killer = Move::new(0, 6, 2, 5);
+        let second_killer = Move::new(1, 4, 3, 4);
+        let mut heuristics = SearchHeuristics::new(8);
+
+        heuristics.record_quiet_cutoff(first_killer, Color::White, 2, 4);
+        heuristics.record_quiet_cutoff(second_killer, Color::White, 2, 2);
+
+        assert_eq!(
+            heuristics.quiet_move_bonus(&second_killer, Color::White, 2),
+            KILLER_MOVE_BONUS
+        );
+        assert_eq!(
+            heuristics.quiet_move_bonus(&first_killer, Color::White, 2),
+            KILLER_MOVE_BONUS - 500
+        );
+        let first_from = first_killer.from_rank * 8 + first_killer.from_file;
+        let first_to = first_killer.to_rank * 8 + first_killer.to_file;
+        assert_eq!(heuristics.history[0][first_from][first_to], 16);
+        assert_eq!(heuristics.history[1][first_from][first_to], 0);
+
+        let ordered = ordered_legal_moves(&mut board, None, Some(&heuristics), 2);
+        assert_eq!(ordered[0], second_killer);
+    }
+
+    #[test]
+    fn test_history_heuristic_penalizes_quiet_moves_previously_searched() {
+        let mv = Move::new(0, 6, 2, 5);
+        let mut heuristics = SearchHeuristics::new(4);
+        heuristics.update_history(mv, Color::White, 20);
+        heuristics.penalize_quiet(mv, Color::White, 4);
+
+        let from = mv.from_rank * 8 + mv.from_file;
+        let to = mv.to_rank * 8 + mv.to_file;
+        assert_eq!(heuristics.history[0][from][to], 12);
     }
 
     #[test]
@@ -1028,7 +1170,7 @@ mod tests {
         board.squares[6][0] = Piece::PawnWhite;
         board.side_to_move = Color::White;
 
-        let moves: Vec<Move> = ordered_legal_moves(&mut board, None);
+        let moves: Vec<Move> = ordered_legal_moves(&mut board, None, None, 0);
         assert!(moves[0].promotion != Promotion::None);
     }
 

@@ -22,10 +22,10 @@ See [Plan 003](docs/plans/003-iterative-deepening.md) and [Plan 004](docs/plans/
 
 - [x] Complete evaluation improvements (material, positional tables, mobility, center, pawn structure, bishop pair, development, and king safety).
 - [x] Add Zobrist hashing and a transposition table.
-- [ ] Revisit move ordering using transposition, killer, and history heuristics.
+- [x] Revisit move ordering using transposition, killer, and history heuristics.
 - [ ] Evaluate a bitboard representation after profiling.
 
-See [Plan 005](docs/plans/005-evaluation.md), [Plan 006](docs/plans/006-transposition-table.md), and [Plan 007](docs/plans/007-bitboards.md).
+See [Plan 005](docs/plans/005-evaluation.md), [Plan 006](docs/plans/006-transposition-table.md), [Plan 007](docs/plans/007-bitboards.md), and [Plan 008](docs/plans/008-move-ordering.md).
 
 ## Working Rules
 

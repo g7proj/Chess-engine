@@ -182,5 +182,5 @@ UCI `go` searches progressively to the current fixed maximum depth and reports d
 ## Notes
 
 - Static evaluation combines material, pawn/knight piece-square bonuses, bishop pair, pseudo-legal mobility, center control, pawn structure, minor-piece development, and king shield/attack pressure. Scores are centipawns from the side-to-move perspective; evaluation weights are initial heuristics and need tuning against a position suite.
-- Current search is iterative-deepening alpha-beta/negamax with quiescence search, a 65,536-slot Zobrist transposition table (enabled by default), and capture, promotion, check, PV, and transposition-move ordering. Rust callers can disable the table through `SearchLimits`.
+- Current search is iterative-deepening alpha-beta/negamax with quiescence search, a 65,536-slot Zobrist transposition table (enabled by default), and capture, promotion, check, PV/TT, killer, and history ordering. Rust callers can disable the table through `SearchLimits`.
 - FEN `fullmove number` handling is present, but should be revisited if game-state logic gets expanded.
