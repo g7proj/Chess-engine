@@ -5,12 +5,19 @@ use std::sync::{
 };
 use std::time::Instant;
 
-use crate::board::{Board, Piece};
+use crate::board::{Board, Color, Piece};
 use crate::moves::{Move, Promotion};
 
 const MATE_SCORE: i32 = 30_000;
 const MAX_QUIESCENCE_PLY: usize = 32;
 const BISHOP_PAIR_BONUS: i32 = 30;
+const CENTER_CONTROL_BONUS: i32 = 8;
+const MOBILITY_BONUS: i32 = 2;
+const DOUBLED_PAWN_PENALTY: i32 = 12;
+const ISOLATED_PAWN_PENALTY: i32 = 10;
+const DEVELOPED_MINOR_BONUS: i32 = 10;
+const KING_SHIELD_BONUS: i32 = 10;
+const KING_PRESSURE_PENALTY: i32 = 8;
 const PAWN_POSITION_BONUS: [[i32; 8]; 8] = [
     [0, 0, 0, 0, 0, 0, 0, 0],
     [5, 10, 10, -20, -20, 10, 10, 5],
@@ -116,11 +123,351 @@ fn evaluate_position(board: &Board) -> i32 {
     if black_bishops >= 2 {
         white_score -= BISHOP_PAIR_BONUS;
     }
-    if board.side_to_move == crate::board::Color::White {
+    for color in [Color::White, Color::Black] {
+        let sign: i32 = if color == Color::White { 1 } else { -1 };
+        white_score += sign
+            * (mobility_score(board, color)
+                + center_control_score(board, color)
+                + pawn_structure_score(board, color)
+                + development_score(board, color)
+                + king_safety_score(board, color));
+    }
+    if board.side_to_move == Color::White {
         white_score
     } else {
         -white_score
     }
+}
+
+/// Scores pseudo-legal mobility for non-pawn pieces in centipawns.
+fn mobility_score(board: &Board, color: Color) -> i32 {
+    let mut mobility: i32 = 0;
+    for rank in 0..8 {
+        for file in 0..8 {
+            let piece: Piece = board.squares[rank][file];
+            if piece.color() != Some(color) || matches!(piece, Piece::PawnWhite | Piece::PawnBlack)
+            {
+                continue;
+            }
+            mobility += piece_mobility(board, piece, rank, file, color);
+        }
+    }
+    mobility * MOBILITY_BONUS
+}
+
+/// Counts reachable non-friendly squares for one piece.
+fn piece_mobility(board: &Board, piece: Piece, rank: usize, file: usize, color: Color) -> i32 {
+    match piece {
+        Piece::KnightWhite | Piece::KnightBlack => count_jump_targets(
+            board,
+            rank,
+            file,
+            &[
+                (2, 1),
+                (2, -1),
+                (-2, 1),
+                (-2, -1),
+                (1, 2),
+                (1, -2),
+                (-1, 2),
+                (-1, -2),
+            ],
+            color,
+        ),
+        Piece::KingWhite | Piece::KingBlack => count_jump_targets(
+            board,
+            rank,
+            file,
+            &[
+                (1, 0),
+                (-1, 0),
+                (0, 1),
+                (0, -1),
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ],
+            color,
+        ),
+        Piece::BishopWhite | Piece::BishopBlack => count_ray_targets(
+            board,
+            rank,
+            file,
+            &[(1, 1), (1, -1), (-1, 1), (-1, -1)],
+            color,
+        ),
+        Piece::RookWhite | Piece::RookBlack => count_ray_targets(
+            board,
+            rank,
+            file,
+            &[(1, 0), (-1, 0), (0, 1), (0, -1)],
+            color,
+        ),
+        Piece::QueenWhite | Piece::QueenBlack => count_ray_targets(
+            board,
+            rank,
+            file,
+            &[
+                (1, 0),
+                (-1, 0),
+                (0, 1),
+                (0, -1),
+                (1, 1),
+                (1, -1),
+                (-1, 1),
+                (-1, -1),
+            ],
+            color,
+        ),
+        _ => 0,
+    }
+}
+
+fn count_jump_targets(
+    board: &Board,
+    rank: usize,
+    file: usize,
+    offsets: &[(isize, isize)],
+    color: Color,
+) -> i32 {
+    offsets
+        .iter()
+        .filter_map(|&(dr, df)| {
+            let target_rank = rank as isize + dr;
+            let target_file = file as isize + df;
+            ((0..8).contains(&target_rank) && (0..8).contains(&target_file))
+                .then_some((target_rank as usize, target_file as usize))
+        })
+        .filter(|&(target_rank, target_file)| {
+            board.squares[target_rank][target_file].color() != Some(color)
+        })
+        .count() as i32
+}
+
+fn count_ray_targets(
+    board: &Board,
+    rank: usize,
+    file: usize,
+    directions: &[(isize, isize)],
+    color: Color,
+) -> i32 {
+    let mut count = 0;
+    for &(dr, df) in directions {
+        let mut target_rank = rank as isize + dr;
+        let mut target_file = file as isize + df;
+        while (0..8).contains(&target_rank) && (0..8).contains(&target_file) {
+            let target = board.squares[target_rank as usize][target_file as usize];
+            if target.color() == Some(color) {
+                break;
+            }
+            count += 1;
+            if target != Piece::Empty {
+                break;
+            }
+            target_rank += dr;
+            target_file += df;
+        }
+    }
+    count
+}
+
+/// Scores attacks on the four central squares in centipawns.
+fn center_control_score(board: &Board, color: Color) -> i32 {
+    [(3, 3), (3, 4), (4, 3), (4, 4)]
+        .into_iter()
+        .filter(|&(rank, file)| square_controlled_by(board, rank, file, color))
+        .count() as i32
+        * CENTER_CONTROL_BONUS
+}
+
+/// Scores doubled, isolated, and passed pawns for one side.
+fn pawn_structure_score(board: &Board, color: Color) -> i32 {
+    let mut files = [0_usize; 8];
+    let mut pawns = Vec::new();
+    for (rank, row) in board.squares.iter().enumerate() {
+        for (file, &piece) in row.iter().enumerate() {
+            if piece.color() == Some(color) && matches!(piece, Piece::PawnWhite | Piece::PawnBlack)
+            {
+                files[file] += 1;
+                pawns.push((rank, file));
+            }
+        }
+    }
+
+    let mut score: i32 = files
+        .iter()
+        .map(|&count| count.saturating_sub(1) as i32 * -DOUBLED_PAWN_PENALTY)
+        .sum();
+    for (rank, file) in pawns {
+        let has_neighbor = (file > 0 && files[file - 1] > 0) || (file < 7 && files[file + 1] > 0);
+        if !has_neighbor {
+            score -= ISOLATED_PAWN_PENALTY;
+        }
+
+        let forward = if color == Color::White {
+            (rank + 1)..8
+        } else {
+            0..rank
+        };
+        let passed = forward.into_iter().all(|enemy_rank| {
+            let start_file = file.saturating_sub(1);
+            let end_file = (file + 1).min(7);
+            (start_file..=end_file).all(|enemy_file| {
+                !matches!(
+                    board.squares[enemy_rank][enemy_file],
+                    Piece::PawnWhite | Piece::PawnBlack
+                ) || board.squares[enemy_rank][enemy_file].color() == Some(color)
+            })
+        });
+        if passed {
+            let advancement = if color == Color::White {
+                rank
+            } else {
+                7 - rank
+            };
+            score += [0, 5, 10, 20, 35, 55, 80, 0][advancement];
+        }
+    }
+    score
+}
+
+/// Rewards knights and bishops developed off their home rank.
+fn development_score(board: &Board, color: Color) -> i32 {
+    let home_rank = if color == Color::White { 0 } else { 7 };
+    board
+        .squares
+        .iter()
+        .enumerate()
+        .flat_map(|(rank, squares)| squares.iter().map(move |&piece| (rank, piece)))
+        .filter(|&(rank, piece)| {
+            piece.color() == Some(color)
+                && matches!(
+                    piece,
+                    Piece::KnightWhite
+                        | Piece::KnightBlack
+                        | Piece::BishopWhite
+                        | Piece::BishopBlack
+                )
+                && rank != home_rank
+        })
+        .count() as i32
+        * DEVELOPED_MINOR_BONUS
+}
+
+/// Scores pawn cover and enemy attacks around a side's king.
+fn king_safety_score(board: &Board, color: Color) -> i32 {
+    let king = if color == Color::White {
+        Piece::KingWhite
+    } else {
+        Piece::KingBlack
+    };
+    let Some((rank, file)) = board.squares.iter().enumerate().find_map(|(rank, row)| {
+        row.iter()
+            .position(|&piece| piece == king)
+            .map(|file| (rank, file))
+    }) else {
+        return 0;
+    };
+
+    let forward_rank = if color == Color::White {
+        rank + 1
+    } else {
+        rank.checked_sub(1).unwrap_or(8)
+    };
+    let shield = if forward_rank < 8 {
+        (file.saturating_sub(1)..=(file + 1).min(7))
+            .filter(|&shield_file| {
+                board.squares[forward_rank][shield_file].color() == Some(color)
+                    && matches!(
+                        board.squares[forward_rank][shield_file],
+                        Piece::PawnWhite | Piece::PawnBlack
+                    )
+            })
+            .count() as i32
+            * KING_SHIELD_BONUS
+    } else {
+        0
+    };
+
+    let pressure = (rank.saturating_sub(1)..=(rank + 1).min(7))
+        .flat_map(|near_rank| {
+            (file.saturating_sub(1)..=(file + 1).min(7))
+                .map(move |near_file| (near_rank, near_file))
+        })
+        .filter(|&(near_rank, near_file)| {
+            (near_rank != rank || near_file != file)
+                && square_controlled_by(board, near_rank, near_file, color.opposite())
+        })
+        .count() as i32
+        * KING_PRESSURE_PENALTY;
+    shield - pressure
+}
+
+/// Returns whether a piece attacks a target square along its movement pattern.
+fn piece_controls_square(
+    board: &Board,
+    piece: Piece,
+    rank: usize,
+    file: usize,
+    target_rank: usize,
+    target_file: usize,
+) -> bool {
+    let dr = target_rank as isize - rank as isize;
+    let df = target_file as isize - file as isize;
+    let abs_dr = dr.abs();
+    let abs_df = df.abs();
+    let pattern_matches = match piece {
+        Piece::KnightWhite | Piece::KnightBlack => {
+            (abs_dr == 2 && abs_df == 1) || (abs_dr == 1 && abs_df == 2)
+        }
+        Piece::BishopWhite | Piece::BishopBlack => abs_dr == abs_df && abs_dr > 0,
+        Piece::RookWhite | Piece::RookBlack => (dr == 0) != (df == 0),
+        Piece::QueenWhite | Piece::QueenBlack => {
+            (dr == 0) != (df == 0) || (abs_dr == abs_df && abs_dr > 0)
+        }
+        Piece::KingWhite | Piece::KingBlack => {
+            abs_dr <= 1 && abs_df <= 1 && (abs_dr != 0 || abs_df != 0)
+        }
+        _ => false,
+    };
+    if !pattern_matches {
+        return false;
+    }
+    if matches!(
+        piece,
+        Piece::KnightWhite | Piece::KnightBlack | Piece::KingWhite | Piece::KingBlack
+    ) {
+        return true;
+    }
+
+    let step_rank = dr.signum();
+    let step_file = df.signum();
+    let mut current_rank = rank as isize + step_rank;
+    let mut current_file = file as isize + step_file;
+    while (current_rank, current_file) != (target_rank as isize, target_file as isize) {
+        if board.squares[current_rank as usize][current_file as usize] != Piece::Empty {
+            return false;
+        }
+        current_rank += step_rank;
+        current_file += step_file;
+    }
+    true
+}
+
+fn square_controlled_by(
+    board: &Board,
+    target_rank: usize,
+    target_file: usize,
+    color: Color,
+) -> bool {
+    (0..8).any(|rank| {
+        (0..8).any(|file| {
+            let piece = board.squares[rank][file];
+            piece.color() == Some(color)
+                && piece_controls_square(board, piece, rank, file, target_rank, target_file)
+        })
+    })
 }
 
 /// Returns the material bonus assigned to a promotion move.
@@ -523,7 +870,7 @@ mod tests {
         let single =
             Board::from_fen("4k3/8/8/8/8/8/8/2B1K3 w - - 0 1").expect("valid single-bishop FEN");
 
-        assert_eq!(evaluate_position(&pair) - evaluate_position(&single), 360);
+        assert!(evaluate_position(&pair) > evaluate_position(&single) + BISHOP_PAIR_BONUS);
     }
 
     #[test]
@@ -533,8 +880,54 @@ mod tests {
         let single = Board::from_fen("2b1k3/8/8/8/8/8/8/4K3 b - - 0 1")
             .expect("valid black single-bishop FEN");
 
-        assert_eq!(evaluate_position(&pair), 690);
-        assert_eq!(evaluate_position(&single), 330);
+        assert!(evaluate_position(&pair) > evaluate_position(&single) + BISHOP_PAIR_BONUS);
+    }
+
+    #[test]
+    fn test_evaluation_rewards_mobility_and_center_control() {
+        let central_knight =
+            Board::from_fen("4k3/8/8/8/3N4/8/8/4K3 w - - 0 1").expect("valid central-knight FEN");
+        let edge_knight =
+            Board::from_fen("4k3/8/8/8/8/8/8/N3K3 w - - 0 1").expect("valid edge-knight FEN");
+        assert!(
+            mobility_score(&central_knight, Color::White)
+                > mobility_score(&edge_knight, Color::White)
+        );
+
+        let central_rook =
+            Board::from_fen("4k3/8/8/8/8/8/8/3RK3 w - - 0 1").expect("valid central-file rook FEN");
+        assert!(center_control_score(&central_rook, Color::White) > 0);
+    }
+
+    #[test]
+    fn test_evaluation_scores_pawn_structure_and_passed_pawns() {
+        let doubled =
+            Board::from_fen("7k/pp6/8/8/8/P7/P7/7K w - - 0 1").expect("valid doubled-pawn FEN");
+        let advanced =
+            Board::from_fen("7k/8/4P3/8/8/8/8/7K w - - 0 1").expect("valid passed-pawn FEN");
+
+        assert!(pawn_structure_score(&doubled, Color::White) < 0);
+        assert!(pawn_structure_score(&advanced, Color::White) > 0);
+    }
+
+    #[test]
+    fn test_evaluation_rewards_development_and_king_shield() {
+        let developed =
+            Board::from_fen("4k3/8/8/8/8/2N5/8/4K3 w - - 0 1").expect("valid developed-knight FEN");
+        let undeveloped = Board::from_fen("4k3/8/8/8/8/8/8/1N2K3 w - - 0 1")
+            .expect("valid undeveloped-knight FEN");
+        assert!(
+            development_score(&developed, Color::White)
+                > development_score(&undeveloped, Color::White)
+        );
+
+        let shielded =
+            Board::from_fen("4k3/8/8/8/8/8/3PPP2/4K3 w - - 0 1").expect("valid king-shield FEN");
+        let exposed =
+            Board::from_fen("4k3/8/8/8/8/8/8/4K3 w - - 0 1").expect("valid exposed-king FEN");
+        assert!(
+            king_safety_score(&shielded, Color::White) > king_safety_score(&exposed, Color::White)
+        );
     }
 
     #[test]
@@ -616,7 +1009,7 @@ mod tests {
         let capture: Move = Move::new(0, 3, 3, 3);
         assert!(board.generate_all_legal_moves().contains(&capture));
         let undo = board.make_move_for_search(capture);
-        assert_eq!(evaluate_position(&board), -800);
+        assert_eq!(evaluate_position(&board), -868);
         let mut stats: SearchStats = SearchStats::default();
         let score: i32 = quiescence_search(
             &mut board,
@@ -630,7 +1023,7 @@ mod tests {
         .expect("search should complete");
         board.unmake_move(undo);
 
-        assert_eq!(score, 125);
+        assert_eq!(score, 146);
         assert!(stats.quiescence_nodes > 1);
         assert_eq!(board.to_fen(), fen);
     }
@@ -651,7 +1044,7 @@ mod tests {
         )
         .expect("search should complete");
 
-        assert_eq!(score, 130);
+        assert_eq!(score, 175);
         assert!(stats.quiescence_nodes > 1);
         assert_eq!(board.to_fen(), fen);
     }
