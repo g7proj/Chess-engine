@@ -10,6 +10,7 @@ use crate::moves::{Move, Promotion};
 
 const MATE_SCORE: i32 = 30_000;
 const MAX_QUIESCENCE_PLY: usize = 32;
+const BISHOP_PAIR_BONUS: i32 = 30;
 const PAWN_POSITION_BONUS: [[i32; 8]; 8] = [
     [0, 0, 0, 0, 0, 0, 0, 0],
     [5, 10, 10, -20, -20, 10, 10, 5],
@@ -84,9 +85,16 @@ fn piece_value(piece: Piece) -> i32 {
 /// Positive values favor the side to move; negative values favor its opponent.
 fn evaluate_position(board: &Board) -> i32 {
     let mut white_score: i32 = 0;
+    let mut white_bishops: usize = 0;
+    let mut black_bishops: usize = 0;
     for rank in 0..8 {
         for file in 0..8 {
             let piece: Piece = board.squares[rank][file];
+            match piece {
+                Piece::BishopWhite => white_bishops += 1,
+                Piece::BishopBlack => black_bishops += 1,
+                _ => {}
+            }
             let (piece_score, positional_bonus): (i32, i32) = match piece {
                 Piece::PawnWhite => (100, PAWN_POSITION_BONUS[rank][file]),
                 Piece::PawnBlack => (100, PAWN_POSITION_BONUS[7 - rank][7 - file]),
@@ -101,6 +109,12 @@ fn evaluate_position(board: &Board) -> i32 {
             };
             white_score += sign * (piece_score + positional_bonus);
         }
+    }
+    if white_bishops >= 2 {
+        white_score += BISHOP_PAIR_BONUS;
+    }
+    if black_bishops >= 2 {
+        white_score -= BISHOP_PAIR_BONUS;
     }
     if board.side_to_move == crate::board::Color::White {
         white_score
@@ -500,6 +514,27 @@ mod tests {
             Board::from_fen("4k3/8/8/8/8/8/8/N3K3 w - - 0 1").expect("valid edge-knight FEN");
 
         assert!(evaluate_position(&central) > evaluate_position(&edge));
+    }
+
+    #[test]
+    fn test_evaluation_rewards_bishop_pair() {
+        let pair =
+            Board::from_fen("4k3/8/8/8/8/8/8/2B1KB2 w - - 0 1").expect("valid bishop-pair FEN");
+        let single =
+            Board::from_fen("4k3/8/8/8/8/8/8/2B1K3 w - - 0 1").expect("valid single-bishop FEN");
+
+        assert_eq!(evaluate_position(&pair) - evaluate_position(&single), 360);
+    }
+
+    #[test]
+    fn test_evaluation_rewards_bishop_pair_for_black() {
+        let pair = Board::from_fen("2b1kb2/8/8/8/8/8/8/4K3 b - - 0 1")
+            .expect("valid black bishop-pair FEN");
+        let single = Board::from_fen("2b1k3/8/8/8/8/8/8/4K3 b - - 0 1")
+            .expect("valid black single-bishop FEN");
+
+        assert_eq!(evaluate_position(&pair), 690);
+        assert_eq!(evaluate_position(&single), 330);
     }
 
     #[test]
