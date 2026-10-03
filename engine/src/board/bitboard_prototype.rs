@@ -1,7 +1,7 @@
 use super::{Board, Color, Piece};
 use crate::moves::{Move, Promotion};
 
-/// Test-only bitboard representation used to compare attack detection costs.
+/// Bitboard position used by the opt-in search and validated against mailbox tests.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BitboardPosition {
     pieces: [u64; 12],
@@ -9,6 +9,7 @@ pub(crate) struct BitboardPosition {
     side_to_move: Color,
     en_passant: Option<(usize, usize)>,
     castling: [bool; 4],
+    zobrist_key: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -22,6 +23,7 @@ pub(crate) struct BitboardUndo {
     previous_side: Color,
     previous_en_passant: Option<(usize, usize)>,
     previous_castling: [bool; 4],
+    previous_zobrist_key: u64,
 }
 
 impl BitboardPosition {
@@ -37,6 +39,7 @@ impl BitboardPosition {
                 board.black_kingside_castle,
                 board.black_queenside_castle,
             ],
+            zobrist_key: board.zobrist_key,
         };
         for rank in 0..8 {
             for file in 0..8 {
@@ -148,6 +151,10 @@ impl BitboardPosition {
         self.piece_at(target).is_some()
             || (moving.is_some_and(|piece| piece % 6 == 0)
                 && self.en_passant == Some((mv.to_rank, mv.to_file)))
+    }
+
+    pub(crate) fn zobrist_key(&self) -> u64 {
+        self.zobrist_key
     }
 
     pub(crate) fn evaluation_controls_square(
@@ -425,6 +432,7 @@ impl BitboardPosition {
         let previous_side = self.side_to_move;
         let previous_en_passant = self.en_passant;
         let previous_castling = self.castling;
+        let previous_zobrist_key = self.zobrist_key;
         let capture_square = if moving % 6 == 0
             && self.en_passant == Some((mv.to_rank, mv.to_file))
             && self.piece_at(to).is_none()
@@ -435,6 +443,8 @@ impl BitboardPosition {
         } else {
             None
         };
+
+        self.update_rule_state_hash();
         let captured = capture_square.map(|square| {
             let piece = self.piece_at(square).unwrap();
             (square, piece)
@@ -481,6 +491,8 @@ impl BitboardPosition {
             None
         };
         self.side_to_move = self.side_to_move.opposite();
+        self.zobrist_key ^= super::zobrist::side_key();
+        self.update_rule_state_hash();
 
         BitboardUndo {
             from,
@@ -492,6 +504,7 @@ impl BitboardPosition {
             previous_side,
             previous_en_passant,
             previous_castling,
+            previous_zobrist_key,
         }
     }
 
@@ -509,6 +522,7 @@ impl BitboardPosition {
         self.side_to_move = undo.previous_side;
         self.en_passant = undo.previous_en_passant;
         self.castling = undo.previous_castling;
+        self.zobrist_key = undo.previous_zobrist_key;
     }
 
     fn clear_rook_castling(&mut self, square: usize) {
@@ -525,19 +539,36 @@ impl BitboardPosition {
         let bit = 1_u64 << square;
         self.pieces[piece] |= bit;
         self.occupancy[piece / 6] |= bit;
+        self.zobrist_key ^=
+            super::zobrist::piece_key(piece_from_index(piece), square / 8, square % 8);
     }
 
     fn remove_piece(&mut self, piece: usize, square: usize) {
         let bit = !(1_u64 << square);
         self.pieces[piece] &= bit;
         self.occupancy[piece / 6] &= bit;
+        self.zobrist_key ^=
+            super::zobrist::piece_key(piece_from_index(piece), square / 8, square % 8);
     }
 
+    fn update_rule_state_hash(&mut self) {
+        for (index, enabled) in self.castling.into_iter().enumerate() {
+            if enabled {
+                self.zobrist_key ^= super::zobrist::castling_key(index);
+            }
+        }
+        if let Some((rank, file)) = self.en_passant {
+            self.zobrist_key ^= super::zobrist::en_passant_key(rank, file);
+        }
+    }
+
+    #[cfg(test)]
     pub(crate) fn matches_board(&self, board: &Board) -> bool {
         self == &Self::from_board(board)
     }
 }
 
+#[cfg(test)]
 impl Board {
     pub(crate) fn enable_bitboard_shadow(&mut self) {
         self.bitboard_shadow = Some(BitboardPosition::from_board(self));
@@ -551,6 +582,7 @@ impl PartialEq for BitboardPosition {
             && self.side_to_move == other.side_to_move
             && self.en_passant == other.en_passant
             && self.castling == other.castling
+            && self.zobrist_key == other.zobrist_key
     }
 }
 

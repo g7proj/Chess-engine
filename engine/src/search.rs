@@ -227,7 +227,7 @@ impl EvaluationPosition for Board {
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "bitboard-search"))]
 impl EvaluationPosition for crate::board::bitboard_prototype::BitboardPosition {
     fn piece_at(&self, rank: usize, file: usize) -> Piece {
         self.piece_on(rank, file)
@@ -293,6 +293,7 @@ fn evaluate_position<P: EvaluationPosition>(board: &P) -> i32 {
     }
 }
 
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn evaluate_search_position(board: &Board) -> i32 {
     #[cfg(test)]
     if let Some(bitboards) = &board.bitboard_shadow {
@@ -640,6 +641,7 @@ fn move_promotion_bonus(promotion: Promotion) -> i32 {
 }
 
 /// Scores a legal move for alpha-beta move ordering.
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
     let moving_piece: Piece = board.squares[mv.from_rank][mv.from_file];
     let target_piece: Piece = board.squares[mv.to_rank][mv.to_file];
@@ -669,6 +671,7 @@ fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
 }
 
 /// Returns legal moves sorted by search priority.
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn ordered_legal_moves(
     board: &mut Board,
     preferred_move: Option<Move>,
@@ -706,6 +709,7 @@ fn ordered_legal_moves(
 ///
 /// `depth` is the number of plies remaining. `alpha` is the best score already
 /// guaranteed, while `beta` is the opponent's cutoff bound.
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn negamax_alpha_beta(
     board: &mut Board,
     depth: usize,
@@ -870,6 +874,7 @@ fn score_from_table(score: i32, ply: usize) -> i32 {
 }
 
 /// Extends leaf evaluation through legal captures and promotions.
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn quiescence_search(
     board: &mut Board,
     mut alpha: i32,
@@ -922,6 +927,7 @@ fn quiescence_search(
     Some(alpha)
 }
 
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn is_capture(board: &Board, mv: &Move) -> bool {
     board.squares[mv.to_rank][mv.to_file] != Piece::Empty
         || (board.is_pawn(board.squares[mv.from_rank][mv.from_file])
@@ -941,84 +947,309 @@ fn bitboard_search(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     depth: usize,
 ) -> (Option<Move>, i32) {
-    let mut nodes = 0;
-    let mut best_move = None;
-    let mut best_score = i32::MIN;
-    let mut alpha = i32::MIN + 1;
-    for mv in bitboard_ordered_moves(position, None) {
-        let undo = position.make_move(mv);
-        let score = -bitboard_negamax(
-            position,
-            depth.saturating_sub(1),
-            -i32::MAX,
-            -alpha,
-            1,
-            &mut nodes,
-        );
-        position.unmake_move(undo);
-        if score > best_score {
-            best_score = score;
-            best_move = Some(mv);
-        }
-        alpha = alpha.max(score);
-    }
-    (best_move, if best_move.is_some() { best_score } else { 0 })
+    bitboard_search_with_table(position, depth, false)
 }
 
 #[cfg(test)]
+fn bitboard_search_with_table(
+    position: &mut crate::board::bitboard_prototype::BitboardPosition,
+    depth: usize,
+    use_table: bool,
+) -> (Option<Move>, i32) {
+    let result = bitboard_search_with_limits(
+        position,
+        depth,
+        SearchLimits {
+            use_transposition_table: use_table,
+            ..SearchLimits::default()
+        },
+    );
+    (result.best_move, result.score)
+}
+
+#[cfg(any(test, feature = "bitboard-search"))]
+fn bitboard_search_with_limits(
+    position: &mut crate::board::bitboard_prototype::BitboardPosition,
+    depth: usize,
+    limits: SearchLimits,
+) -> SearchResult {
+    let start = Instant::now();
+    let deadline = limits
+        .time_limit_ms
+        .map(|ms| start + std::time::Duration::from_millis(ms.min(u64::MAX as u128) as u64));
+    let fallback = bitboard_ordered_moves(position, None, None, 0)
+        .first()
+        .copied();
+    let mut result = SearchResult {
+        best_move: fallback,
+        pv: fallback.into_iter().collect(),
+        score: evaluate_position(position),
+        stats: SearchStats::default(),
+    };
+    if depth == 0 || search_should_stop(&limits, deadline) {
+        result.stats.elapsed_ms = start.elapsed().as_millis();
+        return result;
+    }
+    let mut table = TranspositionTable::new(limits.use_transposition_table);
+    let mut heuristics = SearchHeuristics::new(depth + 2);
+    for current_depth in 1..=depth {
+        if search_should_stop(&limits, deadline) {
+            break;
+        }
+        let mut stats = SearchStats {
+            depth: current_depth,
+            nodes: 1,
+            ..SearchStats::default()
+        };
+        let root_key = position.zobrist_key();
+        let root_entry = if limits.use_transposition_table {
+            table.probe(root_key)
+        } else {
+            None
+        };
+        if root_entry.is_some() {
+            stats.tt_hits += 1;
+        }
+        let root_move = root_entry
+            .and_then(|entry| entry.best_move)
+            .or(result.pv.first().copied());
+        let moves = bitboard_ordered_moves(position, root_move, Some(&heuristics), 0);
+        if moves.is_empty() {
+            result.best_move = None;
+            result.pv.clear();
+            result.score = if position.is_in_check(position.active_color()) {
+                -MATE_SCORE
+            } else {
+                0
+            };
+            result.stats = stats;
+            break;
+        }
+        let mut pv_table = vec![Vec::new(); current_depth + MAX_QUIESCENCE_PLY + 2];
+        let mut best_move = moves[0];
+        let mut best_score = i32::MIN;
+        let mut alpha = i32::MIN + 1;
+        let beta = i32::MAX - 1;
+        let mut complete = true;
+        for mv in moves {
+            if search_should_stop(&limits, deadline) {
+                complete = false;
+                break;
+            }
+            let undo = position.make_move(mv);
+            let child_score = bitboard_negamax(
+                position,
+                current_depth - 1,
+                -beta,
+                -alpha,
+                1,
+                &mut pv_table,
+                &mut stats,
+                &limits,
+                deadline,
+                &mut table,
+                limits.use_transposition_table,
+                &mut heuristics,
+            );
+            position.unmake_move(undo);
+            let Some(child_score) = child_score else {
+                complete = false;
+                break;
+            };
+            let score = -child_score;
+            if score > best_score {
+                best_score = score;
+                best_move = mv;
+                pv_table[0] = vec![mv];
+                let child_pv = pv_table[1].clone();
+                pv_table[0].extend(child_pv);
+            }
+            alpha = alpha.max(score);
+        }
+        if !complete {
+            break;
+        }
+        if limits.use_transposition_table {
+            table.store(TranspositionEntry {
+                key: root_key,
+                depth: current_depth,
+                score: score_to_table(best_score, 0),
+                bound: BoundType::Exact,
+                best_move: Some(best_move),
+            });
+        }
+        result = SearchResult {
+            best_move: Some(best_move),
+            pv: pv_table[0].clone(),
+            score: best_score,
+            stats,
+        };
+    }
+    result.stats.elapsed_ms = start.elapsed().as_millis();
+    result
+}
+
+#[cfg(any(test, feature = "bitboard-search"))]
 fn bitboard_negamax(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     depth: usize,
     mut alpha: i32,
-    beta: i32,
+    mut beta: i32,
     ply: usize,
-    nodes: &mut u64,
-) -> i32 {
-    *nodes += 1;
-    if depth == 0 {
-        return bitboard_quiescence(position, alpha, beta, ply, nodes);
+    pv_table: &mut [Vec<Move>],
+    stats: &mut SearchStats,
+    limits: &SearchLimits,
+    deadline: Option<Instant>,
+    table: &mut TranspositionTable,
+    use_table: bool,
+    heuristics: &mut SearchHeuristics,
+) -> Option<i32> {
+    pv_table[ply].clear();
+    if search_should_stop(limits, deadline) {
+        return None;
     }
-    let moves = bitboard_ordered_moves(position, None);
+    if depth == 0 {
+        return bitboard_quiescence(position, alpha, beta, ply, stats, limits, deadline);
+    }
+    stats.nodes += 1;
+    let original_alpha = alpha;
+    let key = position.zobrist_key();
+    let entry = use_table.then(|| table.probe(key)).flatten();
+    if let Some(entry) = entry {
+        stats.tt_hits += 1;
+        if entry.depth >= depth {
+            let score = score_from_table(entry.score, ply);
+            match entry.bound {
+                BoundType::Exact => {
+                    stats.tt_cutoffs += 1;
+                    pv_table[ply] = entry.best_move.into_iter().collect();
+                    return Some(score);
+                }
+                BoundType::Lower => alpha = alpha.max(score),
+                BoundType::Upper => beta = beta.min(score),
+            }
+            if alpha >= beta {
+                stats.tt_cutoffs += 1;
+                pv_table[ply] = entry.best_move.into_iter().collect();
+                return Some(score);
+            }
+        }
+    }
+    let moving_color = position.active_color();
+    let moves = bitboard_ordered_moves(
+        position,
+        entry.and_then(|entry| entry.best_move),
+        Some(heuristics),
+        ply,
+    );
     if moves.is_empty() {
-        return if position.is_in_check(position.active_color()) {
+        return Some(if position.is_in_check(position.active_color()) {
             -MATE_SCORE + ply as i32
         } else {
             0
-        };
+        });
     }
+    let mut best_move = None;
+    let mut searched_quiet_moves = Vec::new();
     for mv in moves {
+        let is_quiet = !position.is_capture(mv) && mv.promotion == Promotion::None;
         let undo = position.make_move(mv);
-        let score = -bitboard_negamax(position, depth - 1, -beta, -alpha, ply + 1, nodes);
+        let child_score = bitboard_negamax(
+            position,
+            depth - 1,
+            -beta,
+            -alpha,
+            ply + 1,
+            pv_table,
+            stats,
+            limits,
+            deadline,
+            table,
+            use_table,
+            heuristics,
+        );
         position.unmake_move(undo);
+        let Some(child_score) = child_score else {
+            return None;
+        };
+        let score = -child_score;
         if score >= beta {
-            return beta;
+            stats.cutoffs += 1;
+            if is_quiet {
+                heuristics.record_quiet_cutoff(mv, moving_color, ply, depth);
+                for previous in searched_quiet_moves {
+                    heuristics.penalize_quiet(previous, moving_color, depth);
+                }
+            }
+            if use_table {
+                table.store(TranspositionEntry {
+                    key,
+                    depth,
+                    score: score_to_table(beta, ply),
+                    bound: BoundType::Lower,
+                    best_move: Some(mv),
+                });
+            }
+            pv_table[ply] = vec![mv];
+            let child_pv = pv_table[ply + 1].clone();
+            pv_table[ply].extend(child_pv);
+            return Some(beta);
+        }
+        if score > alpha {
+            best_move = Some(mv);
+            pv_table[ply] = vec![mv];
+            let child_pv = pv_table[ply + 1].clone();
+            pv_table[ply].extend(child_pv);
+        }
+        if is_quiet {
+            searched_quiet_moves.push(mv);
         }
         alpha = alpha.max(score);
     }
-    alpha
+    if use_table {
+        table.store(TranspositionEntry {
+            key,
+            depth,
+            score: score_to_table(alpha, ply),
+            bound: if alpha <= original_alpha {
+                BoundType::Upper
+            } else {
+                BoundType::Exact
+            },
+            best_move,
+        });
+    }
+    Some(alpha)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "bitboard-search"))]
 fn bitboard_quiescence(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     mut alpha: i32,
     beta: i32,
     ply: usize,
-    nodes: &mut u64,
-) -> i32 {
-    *nodes += 1;
+    stats: &mut SearchStats,
+    limits: &SearchLimits,
+    deadline: Option<Instant>,
+) -> Option<i32> {
+    stats.nodes += 1;
+    stats.quiescence_nodes += 1;
+    if search_should_stop(limits, deadline) {
+        return None;
+    }
     let in_check = position.is_in_check(position.active_color());
     if ply >= MAX_QUIESCENCE_PLY {
-        return evaluate_position(position);
+        return Some(evaluate_position(position));
     }
     if !in_check {
         let stand_pat = evaluate_position(position);
         if stand_pat >= beta {
-            return beta;
+            stats.cutoffs += 1;
+            return Some(beta);
         }
         alpha = alpha.max(stand_pat);
     }
-    let moves = bitboard_ordered_moves(position, None);
+    let moves = bitboard_ordered_moves(position, None, None, ply);
     let mut found_evasion = false;
     for mv in moves {
         if !in_check && !position.is_capture(mv) && mv.promotion == Promotion::None {
@@ -1026,29 +1257,52 @@ fn bitboard_quiescence(
         }
         found_evasion = true;
         let undo = position.make_move(mv);
-        let score = -bitboard_quiescence(position, -beta, -alpha, ply + 1, nodes);
+        let score = bitboard_quiescence(position, -beta, -alpha, ply + 1, stats, limits, deadline);
         position.unmake_move(undo);
+        let Some(score) = score else {
+            return None;
+        };
+        let score = -score;
         if score >= beta {
-            return beta;
+            stats.cutoffs += 1;
+            return Some(beta);
         }
         alpha = alpha.max(score);
     }
     if in_check && !found_evasion {
-        -MATE_SCORE + ply as i32
+        Some(-MATE_SCORE + ply as i32)
     } else {
-        alpha
+        Some(alpha)
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "bitboard-search"))]
 fn bitboard_ordered_moves(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     preferred: Option<Move>,
+    heuristics: Option<&SearchHeuristics>,
+    ply: usize,
 ) -> Vec<Move> {
     let mut moves = position.generate_legal_moves();
     moves.sort_by_key(|mv| {
         let victim = position.piece_on(mv.to_rank, mv.to_file);
         let attacker = position.piece_on(mv.from_rank, mv.from_file);
+        let is_castling = matches!(attacker, Piece::KingWhite | Piece::KingBlack)
+            && mv.from_file.abs_diff(mv.to_file) == 2;
+        let undo = position.make_move(*mv);
+        let gives_check = position.is_in_check(position.active_color());
+        position.unmake_move(undo);
+        let quiet_bonus = if !position.is_capture(*mv) {
+            heuristics.map_or(0, |ordering| {
+                ordering.quiet_move_bonus(
+                    mv,
+                    attacker.color().unwrap_or(position.active_color()),
+                    ply,
+                )
+            })
+        } else {
+            0
+        };
         Reverse(
             i32::from(Some(*mv) == preferred) * 20_000
                 + if position.is_capture(*mv) {
@@ -1056,7 +1310,10 @@ fn bitboard_ordered_moves(
                 } else {
                     0
                 }
-                + move_promotion_bonus(mv.promotion) * 10,
+                + move_promotion_bonus(mv.promotion) * 10
+                + i32::from(is_castling) * 200
+                + i32::from(gives_check) * 500
+                + quiet_bonus,
         )
     });
     moves
@@ -1072,17 +1329,24 @@ pub fn find_best_move(board: &mut Board, depth: usize) -> Option<Move> {
 
 /// Searches for the best move and returns metrics for the completed search.
 pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResult {
-    let mut transposition_table = TranspositionTable::new(true);
-    let mut heuristics = SearchHeuristics::new(depth + 2);
-    search_at_depth(
-        board,
-        depth,
-        &[],
-        &SearchLimits::default(),
-        None,
-        &mut transposition_table,
-        &mut heuristics,
-    )
+    #[cfg(feature = "bitboard-search")]
+    {
+        return find_best_move_bitboard_with_limits(board, depth, SearchLimits::default());
+    }
+    #[cfg(not(feature = "bitboard-search"))]
+    {
+        let mut transposition_table = TranspositionTable::new(true);
+        let mut heuristics = SearchHeuristics::new(depth + 2);
+        search_at_depth(
+            board,
+            depth,
+            &[],
+            &SearchLimits::default(),
+            None,
+            &mut transposition_table,
+            &mut heuristics,
+        )
+    }
 }
 
 /// Searches progressively deeper and reuses the previous principal variation.
@@ -1092,6 +1356,35 @@ pub fn find_best_move_iterative_with_stats(board: &mut Board, max_depth: usize) 
 
 /// Searches progressively deeper until the depth or time budget is exhausted.
 pub fn find_best_move_iterative_with_limits(
+    board: &mut Board,
+    max_depth: usize,
+    limits: SearchLimits,
+) -> SearchResult {
+    #[cfg(feature = "bitboard-search")]
+    {
+        return find_best_move_bitboard_with_limits(board, max_depth, limits);
+    }
+    #[cfg(not(feature = "bitboard-search"))]
+    {
+        find_best_move_mailbox_with_limits(board, max_depth, limits)
+    }
+}
+
+/// Searches with the standalone bitboard implementation when the feature is enabled.
+///
+/// The mailbox board is used only to initialize the bitboard position and is not mutated.
+#[cfg(feature = "bitboard-search")]
+pub fn find_best_move_bitboard_with_limits(
+    board: &Board,
+    max_depth: usize,
+    limits: SearchLimits,
+) -> SearchResult {
+    let mut position = crate::board::bitboard_prototype::BitboardPosition::from_board(board);
+    bitboard_search_with_limits(&mut position, max_depth, limits)
+}
+
+#[cfg(any(test, not(feature = "bitboard-search")))]
+fn find_best_move_mailbox_with_limits(
     board: &mut Board,
     max_depth: usize,
     limits: SearchLimits,
@@ -1151,6 +1444,7 @@ pub fn find_best_move_iterative_with_limits(
     result
 }
 
+#[cfg(any(test, not(feature = "bitboard-search")))]
 fn search_at_depth(
     board: &mut Board,
     depth: usize,
@@ -1318,6 +1612,18 @@ mod tests {
 
         let ordered = ordered_legal_moves(&mut board, None, Some(&heuristics), 2);
         assert_eq!(ordered[0], second_killer);
+    }
+
+    #[test]
+    fn test_bitboard_move_ordering_uses_quiet_history() {
+        let board = Board::new();
+        let mut bitboards = crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+        let preferred_quiet = Move::new(0, 1, 2, 2);
+        let mut heuristics = SearchHeuristics::new(4);
+        heuristics.update_history(preferred_quiet, Color::White, HISTORY_SCORE_LIMIT);
+
+        let ordered = bitboard_ordered_moves(&mut bitboards, None, Some(&heuristics), 1);
+        assert_eq!(ordered[0], preferred_quiet);
     }
 
     #[test]
@@ -1595,6 +1901,179 @@ mod tests {
     }
 
     #[test]
+    fn test_bitboard_zobrist_updates_and_restores_for_legal_moves() {
+        let positions = [
+            Board::new(),
+            Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
+            Board::from_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1").unwrap(),
+            Board::from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1").unwrap(),
+        ];
+        for board in positions {
+            let mut bitboards =
+                crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+            let initial_key = bitboards.zobrist_key();
+            for mv in bitboards.generate_legal_moves() {
+                let undo = bitboards.make_move(mv);
+                let mut mailbox = board.clone();
+                mailbox.make_move_for_search(mv);
+                assert_eq!(bitboards.zobrist_key(), mailbox.zobrist_key);
+                bitboards.unmake_move(undo);
+                assert_eq!(bitboards.zobrist_key(), initial_key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_standalone_bitboard_search_with_tt_matches_mailbox() {
+        let positions = [
+            (Board::new(), 4),
+            (
+                Board::from_fen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                )
+                .unwrap(),
+                3,
+            ),
+            (
+                Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+                4,
+            ),
+            (
+                Board::from_fen(
+                    "r2q1rk1/ppp2ppp/2npbn2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 1",
+                )
+                .unwrap(),
+                3,
+            ),
+            (
+                Board::from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1").unwrap(),
+                3,
+            ),
+            (
+                Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
+                3,
+            ),
+        ];
+        for (board, depth) in positions {
+            let mut mailbox = board.clone();
+            let expected =
+                find_best_move_mailbox_with_limits(&mut mailbox, depth, SearchLimits::default());
+            let mut bitboards =
+                crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+            let actual =
+                bitboard_search_with_limits(&mut bitboards, depth, SearchLimits::default());
+            assert_eq!(actual.score, expected.score, "{}", board.to_fen());
+            assert_eq!(actual.best_move, expected.best_move, "{}", board.to_fen());
+            assert_eq!(actual.pv, expected.pv, "{}", board.to_fen());
+            assert_eq!(actual.stats.nodes, expected.stats.nodes);
+            assert_eq!(
+                actual.stats.quiescence_nodes,
+                expected.stats.quiescence_nodes
+            );
+            assert_eq!(actual.stats.cutoffs, expected.stats.cutoffs);
+            assert_eq!(actual.stats.tt_hits, expected.stats.tt_hits);
+            assert_eq!(actual.stats.tt_cutoffs, expected.stats.tt_cutoffs);
+            assert_eq!(bitboards.zobrist_key(), board.zobrist_key);
+        }
+    }
+
+    #[cfg(feature = "bitboard-search")]
+    #[test]
+    fn test_feature_search_api_matches_mailbox_and_preserves_board() {
+        let mut board = Board::new();
+        let initial_fen = board.to_fen();
+        let actual = find_best_move_iterative_with_limits(&mut board, 3, SearchLimits::default());
+        let expected = find_best_move_mailbox_with_limits(&mut board, 3, SearchLimits::default());
+        assert_eq!(actual.best_move, expected.best_move);
+        assert_eq!(actual.pv, expected.pv);
+        assert_eq!(actual.score, expected.score);
+        assert_eq!(actual.stats.nodes, expected.stats.nodes);
+        assert_eq!(
+            actual.stats.quiescence_nodes,
+            expected.stats.quiescence_nodes
+        );
+        assert_eq!(board.to_fen(), initial_fen);
+    }
+
+    #[test]
+    fn test_standalone_search_reports_stats_and_respects_stop() {
+        use std::sync::atomic::AtomicBool;
+
+        let board = Board::new();
+        let mut bitboards = crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+        let completed = bitboard_search_with_limits(&mut bitboards, 3, SearchLimits::default());
+        assert_eq!(completed.stats.depth, 3);
+        assert!(completed.stats.nodes > 1);
+        assert!(completed.stats.quiescence_nodes > 0);
+        assert!(completed.stats.cutoffs > 0);
+        assert!(completed.stats.tt_hits > 0);
+        assert!(completed.stats.nps() > 0);
+
+        let mut stopped_position =
+            crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+        let stop = Arc::new(AtomicBool::new(true));
+        let stopped = bitboard_search_with_limits(
+            &mut stopped_position,
+            5,
+            SearchLimits {
+                stop: Some(stop),
+                ..SearchLimits::default()
+            },
+        );
+        assert_eq!(stopped.stats.depth, 0);
+        assert!(
+            stopped
+                .best_move
+                .is_some_and(|mv| board.generate_all_legal_moves().contains(&mv))
+        );
+        assert_eq!(stopped_position.zobrist_key(), board.zobrist_key);
+    }
+
+    #[test]
+    fn test_standalone_search_zero_time_keeps_legal_fallback() {
+        let board = Board::new();
+        let mut bitboards = crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+        let result = bitboard_search_with_limits(
+            &mut bitboards,
+            6,
+            SearchLimits {
+                time_limit_ms: Some(0),
+                ..SearchLimits::default()
+            },
+        );
+        assert_eq!(result.stats.depth, 0);
+        assert!(
+            result
+                .best_move
+                .is_some_and(|mv| board.generate_all_legal_moves().contains(&mv))
+        );
+    }
+
+    #[test]
+    fn test_standalone_search_time_budget_returns_completed_iteration() {
+        let board =
+            Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1")
+                .unwrap();
+        let mut bitboards = crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+        let initial_key = bitboards.zobrist_key();
+        let result = bitboard_search_with_limits(
+            &mut bitboards,
+            8,
+            SearchLimits {
+                time_limit_ms: Some(1),
+                ..SearchLimits::default()
+            },
+        );
+        assert!(result.stats.depth < 8);
+        assert!(
+            result
+                .best_move
+                .is_some_and(|mv| board.generate_all_legal_moves().contains(&mv))
+        );
+        assert_eq!(bitboards.zobrist_key(), initial_key);
+    }
+
+    #[test]
     #[ignore = "timing depends on the machine"]
     fn benchmark_standalone_bitboard_search() {
         let positions = [
@@ -1634,6 +2113,135 @@ mod tests {
             assert_eq!(bitboard_score, mailbox_result.score, "{name}");
             println!(
                 "{name} depth {depth}: standalone-bitboard={bitboard_elapsed:?}, mailbox-no-TT={mailbox_elapsed:?}, score={bitboard_score}, move={bitboard_move:?}"
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "timing depends on the machine"]
+    fn benchmark_standalone_bitboard_search_with_tt() {
+        let positions = [
+            ("start", Board::new(), 4),
+            (
+                "kiwipete",
+                Board::from_fen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                )
+                .unwrap(),
+                3,
+            ),
+            (
+                "endgame",
+                Board::from_fen("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1").unwrap(),
+                4,
+            ),
+            (
+                "middlegame",
+                Board::from_fen(
+                    "r2q1rk1/ppp2ppp/2npbn2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w - - 0 1",
+                )
+                .unwrap(),
+                3,
+            ),
+            (
+                "promotion",
+                Board::from_fen("4k3/P7/8/8/8/8/8/4K3 w - - 0 1").unwrap(),
+                3,
+            ),
+            (
+                "castling",
+                Board::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap(),
+                3,
+            ),
+        ];
+        for (index, (name, board, depth)) in positions.into_iter().enumerate() {
+            let initial_fen = board.to_fen();
+            let mut standalone =
+                crate::board::bitboard_prototype::BitboardPosition::from_board(&board);
+            let mut mailbox = board.clone();
+            let mut run_bitboard = || {
+                let start = Instant::now();
+                let result =
+                    bitboard_search_with_limits(&mut standalone, depth, SearchLimits::default());
+                (result, start.elapsed())
+            };
+            let mut run_mailbox = || {
+                let start = Instant::now();
+                let result = find_best_move_iterative_with_limits(
+                    &mut mailbox,
+                    depth,
+                    SearchLimits::default(),
+                );
+                (result, start.elapsed())
+            };
+            let (bitboard_result, bitboard_elapsed, mailbox_result, mailbox_elapsed) =
+                if index % 2 == 0 {
+                    let (bitboard_result, bitboard_elapsed) = run_bitboard();
+                    let (mailbox_result, mailbox_elapsed) = run_mailbox();
+                    (
+                        bitboard_result,
+                        bitboard_elapsed,
+                        mailbox_result,
+                        mailbox_elapsed,
+                    )
+                } else {
+                    let (mailbox_result, mailbox_elapsed) = run_mailbox();
+                    let (bitboard_result, bitboard_elapsed) = run_bitboard();
+                    (
+                        bitboard_result,
+                        bitboard_elapsed,
+                        mailbox_result,
+                        mailbox_elapsed,
+                    )
+                };
+            assert_eq!(bitboard_result.score, mailbox_result.score, "{name}");
+            assert_eq!(
+                bitboard_result.best_move, mailbox_result.best_move,
+                "{name}"
+            );
+            assert_eq!(bitboard_result.pv, mailbox_result.pv, "{name}");
+            assert_eq!(bitboard_result.stats.depth, depth, "{name}");
+            assert_eq!(
+                bitboard_result.stats.nodes, mailbox_result.stats.nodes,
+                "{name}"
+            );
+            assert_eq!(
+                bitboard_result.stats.quiescence_nodes, mailbox_result.stats.quiescence_nodes,
+                "{name}"
+            );
+            assert_eq!(
+                bitboard_result.stats.cutoffs, mailbox_result.stats.cutoffs,
+                "{name}"
+            );
+            assert_eq!(
+                bitboard_result.stats.tt_hits, mailbox_result.stats.tt_hits,
+                "{name}"
+            );
+            assert_eq!(
+                bitboard_result.stats.tt_cutoffs, mailbox_result.stats.tt_cutoffs,
+                "{name}"
+            );
+            assert_eq!(mailbox.to_fen(), initial_fen, "mailbox restore: {name}");
+            assert_eq!(
+                standalone.zobrist_key(),
+                board.zobrist_key,
+                "bitboard restore: {name}"
+            );
+            println!(
+                "{name} depth {depth}: standalone-bitboard-TT={bitboard_elapsed:?} (nodes={}, qnodes={}, cutoffs={}, TT={}/{}, nps={}), mailbox-TT={mailbox_elapsed:?} (nodes={}, qnodes={}, cutoffs={}, TT={}/{}, nps={}), score={}",
+                bitboard_result.stats.nodes,
+                bitboard_result.stats.quiescence_nodes,
+                bitboard_result.stats.cutoffs,
+                bitboard_result.stats.tt_hits,
+                bitboard_result.stats.tt_cutoffs,
+                bitboard_result.stats.nps(),
+                mailbox_result.stats.nodes,
+                mailbox_result.stats.quiescence_nodes,
+                mailbox_result.stats.cutoffs,
+                mailbox_result.stats.tt_hits,
+                mailbox_result.stats.tt_cutoffs,
+                mailbox_result.stats.nps(),
+                bitboard_result.score
             );
         }
     }

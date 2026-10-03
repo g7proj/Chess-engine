@@ -1,7 +1,7 @@
 use crate::constants::{FILES, RANKS};
 use std::collections::HashMap;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "bitboard-search"))]
 pub(crate) mod bitboard_prototype;
 pub mod color;
 pub mod fen;

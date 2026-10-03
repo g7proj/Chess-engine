@@ -34,7 +34,13 @@ See [Plan 003](docs/plans/003-iterative-deepening.md) and [Plan 004](docs/plans/
 - [x] Port static evaluation to the bitboard position and verify score equivalence.
 - [x] Optimize bitboard evaluation access and controls-square queries; verify exact scores and benchmark full search.
 - [x] Prototype standalone bitboard alpha-beta and quiescence search; verify scores and benchmark against mailbox search without TT.
-- [ ] Port Zobrist/TT, search heuristics, time control, and complete statistics to the standalone state; compare equivalent full searches before considering production integration.
+- [x] Add incremental Zobrist hashing and the existing transposition-table bound semantics to standalone bitboard search.
+- [x] Reuse killer/history heuristics in standalone bitboard move ordering and verify ordering behavior.
+- [x] Add iterative deepening, stop/deadline handling, principal variation, and complete `SearchStats` to standalone bitboard search.
+- [x] Compare standalone bitboard and mailbox search at matching depths across six positions, requiring equal move, PV, score, and search counters.
+- [x] Decide that measured gains justify staged production integration while retaining mailbox as a correctness oracle.
+- [x] Integrate bitboard search behind the reversible `bitboard-search` Cargo feature; keep mailbox as the default and test oracle.
+- [ ] Run release UCI match/performance validation and decide whether the bitboard feature should become the default.
 
 See [Plan 005](docs/plans/005-evaluation.md), [Plan 006](docs/plans/006-transposition-table.md), [Plan 007](docs/plans/007-bitboards.md), and [Plan 008](docs/plans/008-move-ordering.md).
 

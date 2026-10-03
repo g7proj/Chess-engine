@@ -48,6 +48,16 @@ The compiled binary is placed in:
 - `engine/target/debug/engine`
 - `engine/target/release/engine`
 
+The default build keeps the mailbox search. To opt into the standalone bitboard search for library search APIs and UCI, build with the reversible `bitboard-search` feature:
+
+```bash
+cd engine
+cargo build --release --features bitboard-search
+cargo test --features bitboard-search
+```
+
+The feature does not alter perft or board/rule APIs. Mailbox remains the default and is retained as the search-equivalence oracle in tests.
+
 ## Command Line Mode
 
 You can run `perft` and `divide` directly from the binary without entering UCI mode.
@@ -182,7 +192,7 @@ The release-mode primitive profile and test-only bitboard attack comparison can 
 cargo test --release --lib benchmark_profile_engine_primitives -- --ignored --nocapture
 ```
 
-This profile shows attack-query microbenchmarks only. Test-only bitboard-native move generation can be validated with `cargo test --lib test_bitboard_move_generation_matches_mailbox_perft_and_restores_state`; its mirrored perft benchmark is `cargo test --release --lib benchmark_incremental_bitboard_perft -- --ignored --nocapture`. The full-search mailbox/bitboard-shadow benchmark is `cargo test --release --lib benchmark_bitboard_search_prototype -- --ignored --nocapture`; the isolated evaluator benchmark is `cargo test --release --lib benchmark_bitboard_evaluation -- --ignored --nocapture`. A standalone test-only bitboard alpha-beta/quiescence search, with no TT or killer/history heuristics, is checked with `cargo test --lib test_standalone_bitboard_search_matches_mailbox_score_and_restores_state` and benchmarked using `cargo test --release --lib benchmark_standalone_bitboard_search -- --ignored --nocapture`. In the latest run it matched mailbox scores and took 5.5 ms (start depth 3), 24 ms (Kiwipete depth 2), and 1.9 ms (endgame depth 3), versus 8.0, 177, and 4.8 ms for mailbox search with TT disabled. These are machine-dependent prototype measurements; production remains unchanged and the standalone search does not yet include the complete search stack.
+This profile shows attack-query microbenchmarks only. Test-only bitboard-native move generation can be validated with `cargo test --lib test_bitboard_move_generation_matches_mailbox_perft_and_restores_state`; its mirrored perft benchmark is `cargo test --release --lib benchmark_incremental_bitboard_perft -- --ignored --nocapture`. The full-search mailbox/bitboard-shadow benchmark is `cargo test --release --lib benchmark_bitboard_search_prototype -- --ignored --nocapture`; the isolated evaluator benchmark is `cargo test --release --lib benchmark_bitboard_evaluation -- --ignored --nocapture`. The standalone bitboard alpha-beta/quiescence search includes incremental Zobrist hashing, transposition table, shared killer/history ordering, iterative deepening, stop/deadline handling, PV, and `SearchStats`. It is enabled for production library/UCI search with `cargo build --release --features bitboard-search`; the default build remains mailbox. Check hash and ordering with `cargo test --lib test_bitboard_zobrist_updates_and_restores_for_legal_moves` and `cargo test --lib test_bitboard_move_ordering_uses_quiet_history`; test full search equivalence and interruption with `cargo test --lib standalone_bitboard_search_with_tt_matches_mailbox` and `cargo test --lib standalone_search_time_budget_returns_completed_iteration`; benchmark with `cargo test --release --lib benchmark_standalone_bitboard_search_with_tt -- --ignored --nocapture`. Across six matching-depth positions, both paths produced identical best moves, PVs, scores, node/q-node counts, cutoffs, and TT statistics. Two alternating release runs measured 517-522 ms for bitboards versus 1,149-1,217 ms for mailbox, about 55% lower elapsed time. Mailbox remains the correctness oracle; timings are machine-dependent.
 
 UCI `go` searches progressively to the current fixed maximum depth and reports depth, score, nodes, quiescence nodes, NPS, elapsed time, alpha-beta and transposition-table cutoffs/hits, and the principal variation.
 `go movetime <milliseconds>` limits iterative deepening between completed iterations. Search runs on a worker, so `stop` can be received while searching and returns the last completed iteration.

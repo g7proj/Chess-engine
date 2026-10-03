@@ -6,6 +6,10 @@ edition = "2024"
 [dependencies]
 lazy_static = "1.5.0"
 
+[features]
+default = []
+bitboard-search = []
+
 [lib]
 name = "engine"
 path = "src/lib.rs"
