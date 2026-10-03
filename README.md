@@ -48,15 +48,17 @@ The compiled binary is placed in:
 - `engine/target/debug/engine`
 - `engine/target/release/engine`
 
-The default build keeps the mailbox search. To opt into the standalone bitboard search for library search APIs and UCI, build with the reversible `bitboard-search` feature:
+The default build uses the standalone bitboard search for library search APIs and UCI. The mailbox implementation remains available as a reference path:
 
 ```bash
 cd engine
-cargo build --release --features bitboard-search
-cargo test --features bitboard-search
+cargo build --release
+cargo test
+cargo build --release --no-default-features
+cargo test --no-default-features
 ```
 
-The feature does not alter perft or board/rule APIs. Mailbox remains the default and is retained as the search-equivalence oracle in tests.
+The default feature does not alter perft or board/rule APIs. Mailbox is retained as the search-equivalence oracle in tests.
 
 ## Command Line Mode
 
