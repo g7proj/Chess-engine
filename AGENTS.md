@@ -31,6 +31,10 @@ The canonical Kiwipete perft test is intentionally slow. Benchmark tests are ign
 
 Use Rust 2024 conventions, four-space indentation, `snake_case` for functions and variables, `PascalCase` for types, and `SCREAMING_SNAKE_CASE` for constants. Run `cargo fmt` before submitting changes. Keep implementation concise, add Rustdoc `///` comments to public or non-obvious functions, and avoid comments that merely restate code. All the comments and variable names should be in English. The code should be clear, readable, correct and efficient.
 
+## Educational Documentation
+
+Treat this repository as a teaching project. Document each substantial algorithm or chess-engine technique in `docs/` so readers unfamiliar with it can understand its purpose, core idea, important steps, and trade-offs. Use small examples or diagrams when they make a process easier to follow, and link explanations from the README or relevant plan. In code, write concise English Rustdoc comments for public APIs and non-obvious algorithms: state what the function does, what its inputs or result mean, and clarify important invariants or pruning conditions. Add inline comments only where they explain a non-obvious decision; do not narrate straightforward statements. Keep code comments in English even when surrounding discussion is in another language.
+
 ## Testing Guidelines
 
 Use Rust's built-in test framework. Name tests `test_<behavior>` and keep rule changes covered by focused unit tests plus perft regression cases. For move-state changes, verify both the resulting position and make/unmake restoration, including castling, en passant, and promotion.
