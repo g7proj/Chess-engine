@@ -126,6 +126,7 @@ impl SearchHeuristics {
         }
     }
 
+    /// Rewards a quiet move that caused a beta cutoff at this search ply.
     fn record_quiet_cutoff(&mut self, mv: Move, color: Color, ply: usize, depth: usize) {
         if let Some(killers) = self.killers.get_mut(ply)
             && killers[0] != Some(mv)
@@ -136,6 +137,7 @@ impl SearchHeuristics {
         self.update_history(mv, color, depth as i32 * depth as i32);
     }
 
+    /// Reduces the history score of a quiet move searched before the cutoff.
     fn penalize_quiet(&mut self, mv: Move, color: Color, depth: usize) {
         self.update_history(mv, color, -(depth as i32 * depth as i32 / 2).max(1));
     }
@@ -242,8 +244,11 @@ impl EvaluationPosition for crate::board::bitboard_prototype::BitboardPosition {
     }
 }
 
-/// Returns material and piece-square scores from the side-to-move perspective.
-/// Positive values favor the side to move; negative values favor its opponent.
+/// Combines material and positional terms into a side-to-move score.
+///
+/// The calculation accumulates White's advantage first, including piece-square
+/// tables and per-color bonuses, then flips the sign for Black to move. Positive
+/// values favor the side to move; negative values favor its opponent.
 fn evaluate_position<P: EvaluationPosition>(board: &P) -> i32 {
     let mut white_score: i32 = 0;
     let mut white_bishops: usize = 0;
@@ -303,6 +308,9 @@ fn evaluate_search_position(board: &Board) -> i32 {
 }
 
 /// Scores pseudo-legal mobility for non-pawn pieces in centipawns.
+///
+/// Counts reachable squares not occupied by a friendly piece, without
+/// filtering moves that would expose the king to check.
 fn mobility_score<P: EvaluationPosition>(board: &P, color: Color) -> i32 {
     let mut mobility: i32 = 0;
     for rank in 0..8 {
@@ -441,7 +449,9 @@ fn count_ray_targets(
     count
 }
 
-/// Scores attacks on the four central squares in centipawns.
+/// Scores control of the four central squares in centipawns.
+///
+/// Each square contributes once per side, even if multiple pieces control it.
 fn center_control_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     [(3, 3), (3, 4), (4, 3), (4, 4)]
         .into_iter()
@@ -451,6 +461,9 @@ fn center_control_score(board: &impl EvaluationPosition, color: Color) -> i32 {
 }
 
 /// Scores doubled, isolated, and passed pawns for one side.
+///
+/// Doubled and isolated pawns receive fixed penalties; passed pawns gain a
+/// bonus based on relative rank when no enemy pawn blocks the three-file path.
 fn pawn_structure_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     let mut files = [0_usize; 8];
     let mut pawns = Vec::new();
@@ -524,6 +537,9 @@ fn development_score(board: &impl EvaluationPosition, color: Color) -> i32 {
 }
 
 /// Scores pawn cover and enemy attacks around a side's king.
+///
+/// Rewards friendly pawns directly in front of the king and penalizes adjacent
+/// squares controlled by the opponent. This is a local safety heuristic.
 fn king_safety_score(board: &impl EvaluationPosition, color: Color) -> i32 {
     let king = if color == Color::White {
         Piece::KingWhite
@@ -641,6 +657,10 @@ fn move_promotion_bonus(promotion: Promotion) -> i32 {
 }
 
 /// Scores a legal move for alpha-beta move ordering.
+///
+/// The score is only a search priority, not an evaluation of the resulting
+/// position. Captures, promotions, castling, and checks receive ordering bonuses
+/// so likely cutoffs are found earlier.
 #[cfg(any(test, not(feature = "bitboard-search")))]
 fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
     let moving_piece: Piece = board.squares[mv.from_rank][mv.from_file];
@@ -671,6 +691,10 @@ fn move_order_score(board: &mut Board, mv: &Move) -> i32 {
 }
 
 /// Returns legal moves sorted by search priority.
+///
+/// A transposition-table or prior-PV move leads the list, followed by tactical
+/// moves and quiet-move heuristic bonuses. Ordering affects search cost, not
+/// which moves are legal or the minimax score.
 #[cfg(any(test, not(feature = "bitboard-search")))]
 fn ordered_legal_moves(
     board: &mut Board,
@@ -709,6 +733,9 @@ fn ordered_legal_moves(
 ///
 /// `depth` is the number of plies remaining. `alpha` is the best score already
 /// guaranteed, while `beta` is the opponent's cutoff bound.
+/// A child receives the negated window `[-beta, -alpha]`; when its returned
+/// score reaches `beta`, the remaining moves at this node cannot affect the
+/// parent's choice and are skipped.
 #[cfg(any(test, not(feature = "bitboard-search")))]
 fn negamax_alpha_beta(
     board: &mut Board,
@@ -874,6 +901,10 @@ fn score_from_table(score: i32, ply: usize) -> i32 {
 }
 
 /// Extends leaf evaluation through legal captures and promotions.
+///
+/// Outside check, the static evaluation is the stand-pat option and only
+/// captures or promotions are explored. In check, every legal evasion must be
+/// searched because standing pat is illegal. Scores use the side-to-move view.
 #[cfg(any(test, not(feature = "bitboard-search")))]
 fn quiescence_search(
     board: &mut Board,
@@ -1090,6 +1121,10 @@ fn bitboard_search_with_limits(
 }
 
 #[cfg(any(test, feature = "bitboard-search"))]
+/// Searches one bitboard position using negamax alpha-beta pruning.
+///
+/// Scores are from the side-to-move perspective. The child window is negated;
+/// a beta cutoff skips sibling moves that cannot improve the parent result.
 fn bitboard_negamax(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     depth: usize,
@@ -1223,6 +1258,10 @@ fn bitboard_negamax(
 }
 
 #[cfg(any(test, feature = "bitboard-search"))]
+/// Resolves tactically unstable bitboard leaves with captures and promotions.
+///
+/// When the side to move is in check, searches every legal evasion instead of
+/// using a stand-pat score.
 fn bitboard_quiescence(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     mut alpha: i32,
@@ -1277,6 +1316,10 @@ fn bitboard_quiescence(
 }
 
 #[cfg(any(test, feature = "bitboard-search"))]
+/// Orders bitboard legal moves to make alpha-beta cutoffs more likely earlier.
+///
+/// Prior PV/transposition moves and tactical moves lead; quiet moves use killer
+/// and history bonuses. These priorities do not change evaluation scores.
 fn bitboard_ordered_moves(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,
     preferred: Option<Move>,
@@ -1350,11 +1393,19 @@ pub fn find_best_move_with_stats(board: &mut Board, depth: usize) -> SearchResul
 }
 
 /// Searches progressively deeper and reuses the previous principal variation.
+///
+/// Each completed depth replaces the saved result. A stop or time limit during
+/// a later depth therefore returns the best move and PV from the last complete
+/// iteration, while its PV helps order the next iteration's moves.
 pub fn find_best_move_iterative_with_stats(board: &mut Board, max_depth: usize) -> SearchResult {
     find_best_move_iterative_with_limits(board, max_depth, SearchLimits::default())
 }
 
 /// Searches progressively deeper until the depth or time budget is exhausted.
+///
+/// `max_depth` is measured in plies. Search limits can stop an iteration; the
+/// result then contains the last fully completed iteration (or a legal fallback
+/// when no iteration completed).
 pub fn find_best_move_iterative_with_limits(
     board: &mut Board,
     max_depth: usize,

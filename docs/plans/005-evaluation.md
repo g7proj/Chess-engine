@@ -4,6 +4,8 @@
 
 Replace material-only scoring with a small, explainable static evaluation.
 
+For an educational walkthrough of score perspective, material values, positional terms, and current limitations, see [How the Engine Evaluates a Position](../position-evaluation.md).
+
 ## Scope
 
 Add features incrementally: piece-square tables, mobility, center control, pawn structure, bishop pair, development, and king safety. Keep all values in centipawns and document the sign convention.
