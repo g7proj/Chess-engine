@@ -4,15 +4,17 @@ Rust chess engine with a standard UCI interface. It can be connected to any UCI-
 
 ## What is in the repo
 
-- `engine/` - the Rust chess engine
-  - board representation
+- `engine/` - the Rust chess engine and UCI executable
+  - mailbox board representation; bitboard search is the default Cargo feature (`bitboard-search`), and mailbox search remains available with `--no-default-features`
   - move generation
   - FEN load/save
   - legal move filtering
   - check, checkmate, and stalemate detection
   - castling, en passant, and promotion support
-  - iterative deepening alpha-beta search with PV ordering, quiescence search, make/unmake traversal, and search statistics
-- `ml/` - learning experiments
+  - incremental Zobrist hashing and a transposition table
+  - iterative deepening alpha-beta search with PV, killer, and history ordering, quiescence search, make/unmake traversal, and search statistics
+- `docs/` - teaching guides and implementation plans ([index](docs/README.md))
+- `ROADMAP.md` - milestone status
 
 ## Main features
 

@@ -8,7 +8,7 @@
 - `engine/src/search.rs` contains negamax alpha-beta search and move ordering.
 - `engine/src/uci/` handles UCI commands, CLI perft, and divide output.
 - `engine/tests/` contains integration, regression, perft, and benchmark tests.
-- `ml/` contains learning experiments and is separate from the current engine path.
+- `docs/` contains teaching guides and implementation plans. `ROADMAP.md` tracks milestone status.
 
 ## Build, Test, and Development Commands
 
