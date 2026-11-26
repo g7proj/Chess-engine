@@ -207,8 +207,13 @@ UCI `go` searches progressively to the current fixed maximum depth and reports d
 - Current search is iterative-deepening alpha-beta/negamax with quiescence search, a 65,536-slot Zobrist transposition table (enabled by default), and capture, promotion, check, PV/TT, killer, and history ordering. Rust callers can disable the table through `SearchLimits`.
 - FEN `fullmove number` handling is present, but should be revisited if game-state logic gets expanded.
 
-## Search Algorithms
+## Teaching Guides
 
-For an educational walkthrough of negamax, alpha-beta pruning, iterative deepening, quiescence search, and move ordering, see [How the Engine Searches for a Move](docs/search-algorithms.md). It includes score examples, a step-by-step alpha-beta cutoff, and links to the implementation and focused plans.
+For educational walkthroughs of the algorithms and architecture used in this engine, see the [documentation index](docs/README.md):
 
-For the score itself, see [How the Engine Evaluates a Position](docs/position-evaluation.md), which explains material values, positional bonuses and penalties, score perspective, and current evaluation limits.
+- [How the Engine Searches for a Move](docs/search-algorithms.md) — negamax, alpha-beta pruning, iterative deepening, quiescence search, move ordering (MVV-LVA, killers, history), and PV construction.
+- [How the Engine Evaluates a Position](docs/position-evaluation.md) — material values, positional bonuses and penalties, score perspective, and current evaluation limits.
+- [Zobrist Hashing and the Transposition Table](docs/transposition-table.md) — incremental XOR hashing, bound semantics, replacement, and mate-score normalization.
+- [Bitboards vs. Mailbox Representation](docs/bitboards.md) — 64-bit board masks, bit-scanning, attack detection, and oracle validation.
+- [Board Rules, Make/Unmake, and Perft Validation](docs/board-and-perft.md) — FEN state, special rules, reversible `Undo` traversal, draw rules, and `perft`/`divide`.
+- [UCI Protocol and Asynchronous Search Loop](docs/uci-architecture.md) — non-blocking `stdin` handling, search worker thread, and cooperative cancellation.

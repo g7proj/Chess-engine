@@ -4,8 +4,12 @@ Teaching guides explain a technique for readers who are new to it: purpose, core
 
 ## Teaching guides
 
-- [How the Engine Searches for a Move](search-algorithms.md) explains negamax, alpha-beta pruning, iterative deepening, quiescence search, and move ordering.
+- [How the Engine Searches for a Move](search-algorithms.md) explains negamax, alpha-beta pruning, iterative deepening, quiescence search, move ordering (MVV-LVA, killers, history), and PV construction.
 - [How the Engine Evaluates a Position](position-evaluation.md) explains material, positional terms, score perspective, and the current evaluation limits.
+- [Zobrist Hashing and the Transposition Table](transposition-table.md) explains incremental XOR hashing, hash-table indexing, bound types (`Exact`, `Lower`, `Upper`), replacement, and ply-relative mate score normalization.
+- [Bitboards vs. Mailbox Representation](bitboards.md) explains 64-bit board masks, bit-scanning, attack detection, incremental updates, and the oracle validation pattern.
+- [Board Rules, Make/Unmake, and Perft Validation](board-and-perft.md) explains FEN state, pseudo-legal vs. legal filtering, reversible `Undo` state, draw rules, and `perft`/`divide` debugging.
+- [UCI Protocol and Asynchronous Search Loop](uci-architecture.md) explains the non-blocking `stdin` reader, search worker thread, `AtomicBool` cancellation, and race-free `stop`/`quit` handling.
 
 ## Implementation plans
 

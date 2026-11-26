@@ -84,29 +84,45 @@ Quiescence improves leaf stability, but it is still selective: it does not searc
 
 ## Move Ordering: Search Promising Moves First
 
-Move ordering does not change which moves are legal or the minimax result. It changes the order in which they are searched. Because alpha-beta can stop after a cutoff, a good order can make the same search much cheaper.
+Move ordering does not change which moves are legal or the minimax result. It changes the order in which they are searched. Because alpha-beta can stop after a cutoff, trying the strongest move early can shrink the tree dramatically.
 
-The current search prioritizes:
+The current search prioritizes moves in tiers:
 
-1. The transposition-table move or previous PV move.
-2. Captures, ranked using victim and attacker values.
-3. Promotions.
-4. Moves that give check and castling.
-5. Quiet moves favored by killer and history heuristics.
+1. **Transposition-table or previous PV move:** the move that worked best on the previous iteration or in a cached transposition entry is tried first.
+2. **Captures (MVV-LVA):** ranked by *Most Valuable Victim – Least Valuable Attacker* using `10_000 + piece_value(victim) - piece_value(attacker) / 10`.
+   - Capturing a queen (`900`) with a pawn (`100`) scores `10_000 + 900 - 10 = 10_890`.
+   - Capturing a pawn (`100`) with a queen (`900`) scores `10_000 + 100 - 90 = 10_010`.
+   - Winning captures are therefore searched before risky trades with heavy pieces.
+3. **Promotions:** ranked right after or alongside captures (`move_promotion_bonus * 10`, favoring queen promotion over underpromotions).
+4. **Checks and castling:** moves that put the opponent in check receive `+500`; castling receives `+200`.
+5. **Quiet moves (Killer and History heuristics):** quiet moves that neither capture nor promote are ordered using two learned heuristics kept in `SearchHeuristics`:
+   - **Killer moves:** two slots per ply (`killers[ply]`, `[slot0, slot1]`) remember the most recent quiet moves that caused a beta cutoff at that exact depth from the root (`KILLER_MOVE_BONUS = 8_000` for slot 0, `7_500` for slot 1). When a new killer is found, `slot0` shifts into `slot1`. Captures and promotions are excluded because MVV-LVA already orders them high.
+   - **History heuristic (with malus and clamping):** a `[color][from][to]` table tracks quiet moves across the whole search. When a quiet move causes a beta cutoff at remaining `depth`, its history score increases by `depth * depth`. Every quiet move tried *before* that cutoff in the same node failed to refute the position, so it receives a negative penalty (**malus**) of `-(depth * depth / 2).max(1)`. Scores are clamped to `[-2_000, +2_000]` so old history entries cannot outweigh killer moves or captures.
 
-The **killer heuristic** remembers quiet moves that caused a beta cutoff at the same search ply. The **history heuristic** records quiet moves that have often caused cutoffs, indexed by side, origin square, and destination square. Quiet moves searched before a successful cutoff receive a history penalty, helping later searches distinguish them from the move that actually caused the cutoff.
+These scores are search priorities, not chess evaluation scores. Ordering a capture first does not mean the engine has decided the capture is best; it means the capture is worth checking early because it may quickly establish a useful bound. The search still evaluates every move that is needed to determine the result.
 
-These scores are priorities, not chess evaluation scores. Ordering a capture first does not mean the engine has decided the capture is best; it means the capture is worth checking early because it may quickly establish a useful bound. The search still evaluates every move that is needed to determine the result.
+## Building the Principal Variation (PV)
+
+Besides the best root move, UCI GUIs display the **principal variation (PV)**—the expected sequence of best moves for both sides. The search builds this line bottom-up using a per-ply table (`pv_table: Vec<Vec<Move>>`):
+
+```text
+ply 2: pv_table[2] = [Nf6]
+ply 1: Black finds e5 beats alpha -> pv_table[1] = [e5] + pv_table[2] = [e5, Nf6]
+ply 0: White finds e4 beats best  -> pv_table[0] = [e4] + pv_table[1] = [e4, e5, Nf6]
+```
+
+Whenever a move improves `alpha` (or causes a beta cutoff in an internal node), that ply replaces its PV with `[mv]` followed by the child's `pv_table[ply + 1]`. When a transposition-table cutoff returns immediately without searching children, `pv_table[ply]` records the stored `best_move` from the table entry.
 
 ## Putting the Pieces Together
 
 ```text
 for depth = 1, 2, ... until limit or stop:
-    order moves using prior PV, transposition table, and heuristics
+    order moves using prior PV, transposition table, MVV-LVA, killers, and history
     search each required move with negamax
+        probe the transposition table for cached bounds or best move
         pass the negated alpha-beta window to the child
         at depth zero, continue with quiescence search
-        stop a branch when score reaches beta
+        stop a branch when score reaches beta and update killer/history heuristics
     if this depth completed:
         save score, best move, and principal variation
 return the last completed result
@@ -117,6 +133,10 @@ In the code, `negamax_alpha_beta` and `quiescence_search` are the mailbox versio
 ## Further Reading in This Repository
 
 - [Position evaluation guide](position-evaluation.md)
+- [Zobrist hashing and transposition table guide](transposition-table.md)
+- [Bitboards vs. mailbox guide](bitboards.md)
+- [Board rules, make/unmake, and perft guide](board-and-perft.md)
+- [UCI protocol and async search loop guide](uci-architecture.md)
 - [Iterative deepening plan](plans/003-iterative-deepening.md)
 - [Quiescence search plan](plans/004-quiescence-search.md)
 - [Move ordering plan](plans/008-move-ordering.md)
