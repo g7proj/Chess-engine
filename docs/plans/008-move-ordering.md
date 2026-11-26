@@ -4,6 +4,8 @@
 
 Improve alpha-beta cutoffs by ordering likely-good quiet moves after PV/TT moves, captures, and promotions.
 
+For an educational walkthrough of MVV-LVA, killer moves, and the history heuristic, see [How the Engine Searches for a Move](../search-algorithms.md).
+
 ## Implementation
 
 - [x] Keep the PV/TT move as the highest-priority move.

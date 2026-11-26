@@ -27,6 +27,7 @@ pub(crate) struct BitboardUndo {
 }
 
 impl BitboardPosition {
+    /// Converts a mailbox `Board` into a standalone 64-bit bitboard position.
     pub(crate) fn from_board(board: &Board) -> Self {
         let mut position = Self {
             pieces: [0; 12],
@@ -56,6 +57,7 @@ impl BitboardPosition {
         position
     }
 
+    /// Returns `true` if `(rank, file)` is attacked by any piece of `by_color`.
     pub(crate) fn is_square_attacked(&self, rank: usize, file: usize, by_color: Color) -> bool {
         let target = rank * 8 + file;
         let color_offset = color_index(by_color) * 6;
@@ -110,6 +112,7 @@ impl BitboardPosition {
         false
     }
 
+    /// Returns `true` if `color`'s king is currently under attack.
     pub(crate) fn is_in_check(&self, color: Color) -> bool {
         let king_index = color_index(color) * 6 + 5;
         let Some(square) = (self.pieces[king_index] != 0)
@@ -157,6 +160,10 @@ impl BitboardPosition {
         self.zobrist_key
     }
 
+    /// Returns `true` if a non-pawn piece of `color` attacks `(target_rank, target_file)`.
+    ///
+    /// Iterates only set bits in the matching piece masks and casts rays against
+    /// combined occupancy to match the mailbox evaluation semantics.
     pub(crate) fn evaluation_controls_square(
         &self,
         target_rank: usize,
@@ -655,6 +662,7 @@ fn piece_parts(piece: Piece) -> Option<(Color, usize)> {
     }
 }
 
+/// Returns a bitboard mask of squares from which a knight attacks `square`.
 fn knight_attacks(square: usize) -> u64 {
     let rank = (square / 8) as isize;
     let file = (square % 8) as isize;
@@ -680,6 +688,7 @@ fn knight_attacks(square: usize) -> u64 {
     })
 }
 
+/// Returns a bitboard mask of squares from which a king attacks `square`.
 fn king_attacks(square: usize) -> u64 {
     let rank = (square / 8) as isize;
     let file = (square % 8) as isize;
@@ -699,6 +708,7 @@ fn king_attacks(square: usize) -> u64 {
     })
 }
 
+/// Returns a bitboard mask of squares from which a pawn of `pawn_color` attacks `square`.
 fn pawn_attacks(square: usize, pawn_color: Color) -> u64 {
     let rank = (square / 8) as isize;
     let file = (square % 8) as isize;

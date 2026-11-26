@@ -1,3 +1,4 @@
+/// Side to move or piece color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Color {
     White,
@@ -5,6 +6,7 @@ pub enum Color {
 }
 
 impl Color {
+    /// Returns the opposing color.
     pub fn opposite(&self) -> Self {
         match self {
             Color::White => Color::Black,
@@ -12,6 +14,7 @@ impl Color {
         }
     }
 
+    /// Returns the lowercase FEN color character (`'w'` or `'b'`).
     pub fn to_fen_char(&self) -> char {
         match self {
             Color::White => 'w',

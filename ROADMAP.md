@@ -1,6 +1,6 @@
 # Engine Roadmap
 
-This roadmap tracks the planned evolution of the chess engine. Detailed implementation notes live in [`docs/plans/`](docs/plans/).
+This roadmap tracks the planned evolution of the chess engine. Teaching guides live in [`docs/`](docs/README.md), and detailed implementation notes live in [`docs/plans/`](docs/plans/).
 
 ## Completed Foundations
 

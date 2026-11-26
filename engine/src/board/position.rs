@@ -6,6 +6,10 @@ use crate::{
 use super::Board;
 
 impl Board {
+    /// Builds the position key used for threefold-repetition tracking.
+    ///
+    /// Includes piece placement, side to move, castling rights, and en-passant
+    /// square, omitting halfmove and fullmove counters.
     pub fn repetition_key(&self) -> String {
         let mut key: String = self.position_string();
         key.push(' ');
@@ -41,25 +45,30 @@ impl Board {
         key
     }
 
+    /// Increments the repetition count for the current position.
     pub fn record_position(&mut self) {
         let key: String = self.repetition_key();
         let position_counter: &mut usize = self.history.entry(key).or_insert(0);
         *position_counter += 1;
     }
 
+    /// Returns `true` if the current position has occurred at least three times.
     pub fn is_repetition_draw(&self) -> bool {
         let key: String = self.repetition_key();
         self.history.get(&key).copied().unwrap_or(0) >= 3
     }
 
+    /// Returns `true` when the halfmove clock has reached 100 plies (50 full moves).
     pub fn is_50_move_draw(&self) -> bool {
         self.halfmove_clock >= 100
     }
 
+    /// Clears recorded position-repetition history.
     pub fn clear_position_history(&mut self) {
         self.history.clear();
     }
 
+    /// Returns `true` when neither side has enough material to force checkmate.
     pub fn is_insufficient_material(&self) -> bool {
         let mut white_bishops: usize = 0;
         let mut black_bishops: usize = 0;

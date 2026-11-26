@@ -4,6 +4,8 @@
 
 Make the engine predictable and usable in UCI GUIs and timed games.
 
+For an educational walkthrough of the current non-blocking UCI loop and worker cancellation, see [UCI Protocol and Asynchronous Search Loop](../uci-architecture.md).
+
 ## Scope
 
 - [ ] Parse `go depth`, `nodes`, `movetime`, `wtime`, `btime`, `winc`, `binc`, and `infinite`.

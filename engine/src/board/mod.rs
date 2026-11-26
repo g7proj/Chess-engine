@@ -13,6 +13,7 @@ pub(crate) mod zobrist;
 pub use color::Color;
 pub use piece::Piece;
 
+/// Mailbox chessboard state, rule metadata, repetition history, and Zobrist key.
 #[derive(Debug, Clone)]
 pub struct Board {
     pub squares: [[Piece; FILES]; RANKS],
@@ -31,6 +32,7 @@ pub struct Board {
 }
 
 impl Board {
+    /// Creates a board initialized to the standard chess starting position.
     pub fn new() -> Self {
         use Piece::*;
         let squares: [[Piece; FILES]; RANKS] = [

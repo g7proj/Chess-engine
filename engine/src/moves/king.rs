@@ -3,6 +3,7 @@ use crate::constants::in_bounds;
 use crate::moves::Move;
 
 impl Board {
+    /// Generates pseudo-legal king steps plus castling moves whose path is empty and unattacked.
     pub fn generate_king_moves(&self, rank: usize, file: usize) -> Vec<Move> {
         let mut moves: Vec<Move> = Vec::new();
         let piece: Piece = self.squares[rank][file];

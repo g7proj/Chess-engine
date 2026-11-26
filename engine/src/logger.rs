@@ -3,6 +3,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Mutex;
 
+/// Severity filter for file logging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
     Debug,
@@ -16,9 +17,11 @@ lazy_static! {
     static ref LOG_FILE_PATH: Mutex<String> = Mutex::new("engine_debug.log".to_string());
 }
 
+/// Simple file logger for UCI diagnostics.
 pub struct Logger;
 
 impl Logger {
+    /// Sets the minimum log level and truncates the target log file.
     pub fn init(log_level: LogLevel, log_path: &str) {
         *CURRENT_LOG_LEVEL.lock().unwrap() = log_level; // Set the current log level
         *LOG_FILE_PATH.lock().unwrap() = log_path.to_string(); // Set the log file path

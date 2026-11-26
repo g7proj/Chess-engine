@@ -93,6 +93,7 @@ impl Default for SearchLimits {
     }
 }
 
+/// Alpha-beta bound classification stored with a transposition-table entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BoundType {
     Exact,
@@ -100,6 +101,7 @@ enum BoundType {
     Upper,
 }
 
+/// Cached search result for one Zobrist-hashed position.
 #[derive(Debug, Clone, Copy)]
 struct TranspositionEntry {
     key: u64,
@@ -109,10 +111,12 @@ struct TranspositionEntry {
     best_move: Option<Move>,
 }
 
+/// Fixed-size, power-of-two transposition table with depth-preferred replacement.
 struct TranspositionTable {
     entries: Vec<Option<TranspositionEntry>>,
 }
 
+/// Per-search move-ordering tables for killer moves and quiet-move history scores.
 struct SearchHeuristics {
     killers: Vec<[Option<Move>; 2]>,
     history: [[[i32; 64]; 64]; 2],
@@ -170,6 +174,7 @@ impl SearchHeuristics {
 }
 
 impl TranspositionTable {
+    /// Allocates a table of `TRANSPOSITION_TABLE_SIZE` slots when `enabled` is true.
     fn new(enabled: bool) -> Self {
         Self {
             entries: if enabled {
@@ -180,10 +185,12 @@ impl TranspositionTable {
         }
     }
 
+    /// Looks up `key` in the masked slot, returning the entry only on an exact key match.
     fn probe(&self, key: u64) -> Option<TranspositionEntry> {
         self.entries[key as usize & (self.entries.len() - 1)].filter(|entry| entry.key == key)
     }
 
+    /// Stores `entry` using a depth-preferred replacement policy (`new.depth >= old.depth`).
     fn store(&mut self, entry: TranspositionEntry) {
         let index = entry.key as usize & (self.entries.len() - 1);
         let slot = &mut self.entries[index];
@@ -880,6 +887,10 @@ fn negamax_alpha_beta(
     Some(alpha)
 }
 
+/// Normalizes mate scores from root-relative ply to node-relative before TT storage.
+///
+/// Scores above `MATE_SCORE_THRESHOLD` are shifted by `+ply` (or `-ply` for losses)
+/// so mate distances remain accurate when probed at a different search ply.
 fn score_to_table(score: i32, ply: usize) -> i32 {
     if score >= MATE_SCORE_THRESHOLD {
         score + ply as i32
@@ -890,6 +901,7 @@ fn score_to_table(score: i32, ply: usize) -> i32 {
     }
 }
 
+/// Restores a stored TT mate score back to root-relative distance at `ply`.
 fn score_from_table(score: i32, ply: usize) -> i32 {
     if score >= MATE_SCORE_THRESHOLD {
         score - ply as i32
@@ -998,6 +1010,10 @@ fn bitboard_search_with_table(
     (result.best_move, result.score)
 }
 
+/// Runs iterative-deepening alpha-beta search directly on `BitboardPosition`.
+///
+/// Retains the deepest fully completed iteration when `limits` trigger an early
+/// stop, falling back to a legal root move if depth 1 does not complete.
 #[cfg(any(test, feature = "bitboard-search"))]
 fn bitboard_search_with_limits(
     position: &mut crate::board::bitboard_prototype::BitboardPosition,

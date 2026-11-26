@@ -4,6 +4,8 @@
 
 Evaluate whether bitboards provide a worthwhile speedup after profiling.
 
+For an educational walkthrough of 64-bit masks, bit-scanning, and the mailbox oracle pattern, see [Bitboards vs. Mailbox Representation](../bitboards.md).
+
 ## Scope
 
 Measure time spent in move generation, attack detection, make/unmake, and search. Only then prototype bitboards behind focused tests or a separate representation module.

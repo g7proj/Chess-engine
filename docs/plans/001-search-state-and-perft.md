@@ -8,6 +8,8 @@ The game/search move-application split and make/unmake perft traversal are compl
 
 Remove game-history overhead from search and make `perft` use the same make/unmake discipline as alpha-beta.
 
+For an educational walkthrough of board state, `Undo` traversal, draw rules, and `perft`/`divide`, see [Board Rules, Make/Unmake, and Perft Validation](../board-and-perft.md).
+
 ## Scope
 
 - Add a search-specific move application path that does not update repetition history unless required.

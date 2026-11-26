@@ -1,10 +1,12 @@
 use super::{Board, Color, Piece};
 
 impl Board {
+    /// Returns the color of `piece`, or `None` for `Piece::Empty`.
     pub fn piece_color(&self, piece: Piece) -> Option<Color> {
         piece.color()
     }
 
+    /// Returns `true` when both squares hold non-empty pieces of the same color.
     pub fn same_color(&self, piece1: Piece, piece2: Piece) -> bool {
         if piece1 == Piece::Empty || piece2 == Piece::Empty {
             return false;

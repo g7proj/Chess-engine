@@ -8,6 +8,8 @@ Complete for captures, en passant, and promotions. Quiet checks are deferred.
 
 Avoid evaluating tactically unstable positions at the normal search horizon.
 
+For an educational walkthrough of quiescence search, stand-pat bounds, and check evasions, see [How the Engine Searches for a Move](../search-algorithms.md).
+
 ## Scope
 
 At the depth boundary, run a stand-pat evaluation and continue with legal captures, en passant, and promotions. Reuse alpha-beta bounds and make/unmake. Track quiescence nodes separately while including them in total search nodes.

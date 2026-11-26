@@ -9,6 +9,7 @@ pub mod knight;
 pub mod pawn;
 pub mod sliding;
 
+/// Piece type chosen when a pawn promotes on the final rank.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Promotion {
     Queen,
@@ -18,6 +19,7 @@ pub enum Promotion {
     None,
 }
 
+/// Zero-based board coordinates and optional promotion for one chess move.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Move {
     pub from_rank: usize,
@@ -48,6 +50,7 @@ pub struct Undo {
 }
 
 impl Move {
+    /// Creates a non-promoting move from `(fr, ff)` to `(tr, tf)`.
     pub fn new(fr: usize, ff: usize, tr: usize, tf: usize) -> Self {
         Move {
             from_rank: fr,
@@ -58,6 +61,7 @@ impl Move {
         }
     }
 
+    /// Creates a move with an explicit promotion piece `p`.
     pub fn with_promotion(fr: usize, ff: usize, tr: usize, tf: usize, p: Promotion) -> Self {
         Move {
             from_rank: fr,

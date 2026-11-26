@@ -5,10 +5,12 @@ const CASTLING_KEY_ID: u64 = 769;
 const EN_PASSANT_KEY_ID: u64 = 773;
 
 impl Board {
+    /// Recomputes and stores the board's cached 64-bit Zobrist key.
     pub(crate) fn refresh_zobrist_key(&mut self) {
         self.zobrist_key = self.calculate_zobrist_key();
     }
 
+    /// Computes the full Zobrist hash from piece placement, turn, castling, and en passant.
     pub(crate) fn calculate_zobrist_key(&self) -> u64 {
         let mut key = 0;
         for rank in 0..8 {
@@ -42,20 +44,24 @@ impl Board {
     }
 }
 
+/// Returns the Zobrist key contribution for `piece` at `(rank, file)`.
 pub(crate) fn piece_key(piece: Piece, rank: usize, file: usize) -> u64 {
     piece_index(piece)
         .map(|index| zobrist_value(index * 64 + (rank * 8 + file) as u64))
         .unwrap_or(0)
 }
 
+/// Returns the Zobrist key toggled whenever the side to move changes.
 pub(crate) fn side_key() -> u64 {
     zobrist_value(SIDE_KEY_ID)
 }
 
+/// Returns the Zobrist key for castling flag `index` (`0..4` for `K, Q, k, q`).
 pub(crate) fn castling_key(index: usize) -> u64 {
     zobrist_value(CASTLING_KEY_ID + index as u64)
 }
 
+/// Returns the Zobrist key for an active en-passant target square.
 pub(crate) fn en_passant_key(rank: usize, file: usize) -> u64 {
     zobrist_value(EN_PASSANT_KEY_ID + (rank * 8 + file) as u64)
 }
@@ -79,6 +85,7 @@ fn piece_index(piece: Piece) -> Option<u64> {
     }
 }
 
+/// Deterministically mixes an integer feature ID into a 64-bit Zobrist value.
 fn zobrist_value(id: u64) -> u64 {
     let mut value = 0x9e37_79b9_7f4a_7c15_u64.wrapping_mul(id + 1);
     value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);

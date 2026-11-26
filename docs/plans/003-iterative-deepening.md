@@ -8,6 +8,8 @@ Complete. `movetime` and asynchronous UCI `stop` return the last completed itera
 
 Search progressively deeper while retaining the best completed result.
 
+For an educational walkthrough of iterative deepening, PV reuse, and alpha-beta, see [How the Engine Searches for a Move](../search-algorithms.md).
+
 ## Scope
 
 - Search depths from 1 through the requested limit.

@@ -4,6 +4,7 @@ use crate::{
 };
 
 impl Board {
+    /// Returns `true` when `color`'s king is attacked by an opponent piece.
     pub fn is_in_check(&self, color: Color) -> bool {
         #[cfg(test)]
         if let Some(bitboards) = &self.bitboard_shadow {
@@ -51,6 +52,7 @@ impl Board {
         self.is_in_check(self.side_to_move) && self.generate_all_legal_moves().is_empty()
     }
 
+    /// Returns `true` when the side to move is not in check and has no legal moves.
     pub fn is_stalemate(&self) -> bool {
         // if the side to move is in check there is no stalemate
         if self.is_in_check(self.side_to_move) {
@@ -63,6 +65,7 @@ impl Board {
         is_stale
     }
 
+    /// Returns `true` if any piece of `attack_by_color` attacks `(rank, file)`.
     pub fn is_square_under_attack(&self, rank: usize, file: usize, attack_by_color: Color) -> bool {
         use Piece::*;
 

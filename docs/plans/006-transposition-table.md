@@ -4,6 +4,8 @@
 
 Reuse scores for positions reached through different move orders.
 
+For an educational walkthrough of Zobrist hashing, bound semantics, replacement, and mate-score normalization, see [Zobrist Hashing and the Transposition Table](../transposition-table.md).
+
 ## Scope
 
 - Add incremental Zobrist keys for pieces, side, castling, and en passant.

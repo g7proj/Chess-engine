@@ -3,6 +3,7 @@ use crate::constants::{FILES, in_bounds};
 use crate::moves::Move;
 
 impl Board {
+    /// Generates pseudo-legal pawn pushes, captures, en passant, and promotions from `(rank, file)`.
     pub fn generate_pawn_moves(&self, rank: usize, file: usize) -> Vec<Move> {
         use Piece::*;
         let mut moves = Vec::new();

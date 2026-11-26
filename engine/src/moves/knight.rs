@@ -3,6 +3,7 @@ use crate::constants::in_bounds;
 use crate::moves::Move;
 
 impl Board {
+    /// Generates pseudo-legal knight jumps from `(rank, file)`.
     pub fn generate_knight_moves(&self, rank: usize, file: usize) -> Vec<Move> {
         let mut moves: Vec<Move> = Vec::new();
         let piece: Piece = self.squares[rank][file];

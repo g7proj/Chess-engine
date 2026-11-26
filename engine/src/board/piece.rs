@@ -1,5 +1,6 @@
 use super::color::Color;
 
+/// Square occupant in the mailbox board representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Piece {
     Empty,
@@ -18,6 +19,7 @@ pub enum Piece {
 }
 
 impl Piece {
+    /// Converts the piece into its single-character FEN symbol (`' '` for `Empty`).
     pub fn to_fen_char(&self) -> char {
         use Piece::*;
         match self {
@@ -37,6 +39,7 @@ impl Piece {
         }
     }
 
+    /// Parses a piece from a single-character FEN symbol.
     pub fn from_fen_char(ch: char) -> Result<Self, String> {
         use Piece::*;
         match ch {
@@ -56,6 +59,7 @@ impl Piece {
         }
     }
 
+    /// Returns the piece's color, or `None` for `Piece::Empty`.
     pub fn color(&self) -> Option<Color> {
         use Piece::*;
         match self {

@@ -3,6 +3,7 @@ use crate::constants::in_bounds;
 use crate::moves::Move;
 
 impl Board {
+    /// Generates pseudo-legal diagonal bishop moves from `(rank, file)`.
     pub fn generate_bishop_moves(&self, rank: usize, file: usize) -> Vec<Move> {
         let mut moves: Vec<Move> = Vec::new();
         let piece: Piece = self.squares[rank][file];
@@ -40,6 +41,7 @@ impl Board {
         moves
     }
 
+    /// Generates pseudo-legal orthogonal rook moves from `(rank, file)`.
     pub fn generate_rook_moves(&self, rank: usize, file: usize) -> Vec<Move> {
         let mut moves: Vec<Move> = Vec::new();
         let piece: Piece = self.squares[rank][file];
@@ -77,6 +79,7 @@ impl Board {
         moves
     }
 
+    /// Generates pseudo-legal orthogonal and diagonal queen moves from `(rank, file)`.
     pub fn generate_queen_moves(&self, rank: usize, file: usize) -> Vec<Move> {
         let mut moves: Vec<Move> = Vec::new();
         let piece: Piece = self.squares[rank][file];
